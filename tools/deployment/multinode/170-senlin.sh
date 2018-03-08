@@ -26,7 +26,9 @@ fi
 helm upgrade --install senlin ./senlin \
   --namespace=openstack $values \
   --set pod.replicas.api=2 \
-  --set pod.replicas.engine=2
+  --set pod.replicas.engine=2 \
+  ${OSH_EXTRA_HELM_ARGS} \
+  ${OSH_EXTRA_HELM_ARGS_SENLIN}
 
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack

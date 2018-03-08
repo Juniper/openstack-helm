@@ -25,7 +25,9 @@ fi
 #NOTE: Wait for deploy
 helm upgrade --install gnocchi ./gnocchi \
   --namespace=openstack $values \
-  --set pod.replicas.api=2
+  --set pod.replicas.api=2 \
+  ${OSH_EXTRA_HELM_ARGS} \
+  ${OSH_EXTRA_HELM_ARGS_GNOCCHI}
 
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack

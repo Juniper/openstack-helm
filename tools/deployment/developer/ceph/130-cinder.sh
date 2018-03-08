@@ -28,7 +28,8 @@ fi
 : ${OSH_EXTRA_HELM_ARGS:=""}
 helm upgrade --install cinder ./cinder \
   --namespace=openstack $values \
-  ${OSH_EXTRA_HELM_ARGS}
+  ${OSH_EXTRA_HELM_ARGS} \
+  ${OSH_EXTRA_HELM_ARGS_CINDER}
 
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack

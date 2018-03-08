@@ -24,7 +24,9 @@ fi
 
 #NOTE: Wait for deploy
 helm upgrade --install postgresql ./postgresql \
-  --namespace=openstack $values
+  --namespace=openstack $values \
+  ${OSH_EXTRA_HELM_ARGS} \
+  ${OSH_EXTRA_HELM_ARGS_POSTGRESQL}
 
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack

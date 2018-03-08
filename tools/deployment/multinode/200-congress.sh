@@ -30,7 +30,9 @@ helm upgrade --install congress ./congress \
   --namespace=openstack $values \
   --set pod.replicas.api=2 \
   --set pod.replicas.policy_engine=2 \
-  --set pod.replicas.datasource=1
+  --set pod.replicas.datasource=1 \
+  ${OSH_EXTRA_HELM_ARGS} \
+  ${OSH_EXTRA_HELM_ARGS_CONGRESS}
 
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack
