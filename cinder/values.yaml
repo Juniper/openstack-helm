@@ -1,0 +1,842 @@
+# Copyright 2017 The Openstack-Helm Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Default values for cinder.
+# This is a YAML-formatted file.
+# Declare name/value pairs to be passed into your templates.
+# name: value
+
+storage: ceph
+
+labels:
+  api:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  backup:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  job:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  scheduler:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  test:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+  volume:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
+
+release_group: null
+
+images:
+  tags:
+    test: docker.io/kolla/ubuntu-source-rally:4.0.0
+    db_init: docker.io/openstackhelm/heat:newton
+    cinder_db_sync: docker.io/openstackhelm/cinder:newton
+    db_drop: docker.io/openstackhelm/heat:newton
+    rabbit_init: docker.io/rabbitmq:3.7-management
+    ks_user: docker.io/openstackhelm/heat:newton
+    ks_service: docker.io/openstackhelm/heat:newton
+    ks_endpoints: docker.io/openstackhelm/heat:newton
+    cinder_api: docker.io/openstackhelm/cinder:newton
+    bootstrap: docker.io/openstackhelm/heat:newton
+    cinder_scheduler: docker.io/openstackhelm/cinder:newton
+    cinder_volume: docker.io/openstackhelm/cinder:newton
+    cinder_volume_usage_audit: docker.io/openstackhelm/cinder:newton
+    cinder_storage_init: docker.io/ceph/daemon:tag-build-master-luminous-ubuntu-16.04
+    cinder_backup: docker.io/openstackhelm/cinder:newton
+    cinder_backup_storage_init: docker.io/ceph/daemon:tag-build-master-luminous-ubuntu-16.04
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
+  pull_policy: "IfNotPresent"
+
+jobs:
+  volume_usage_audit:
+    cron: "*/5 * * * *"
+    history:
+      success: 3
+      failed: 1
+
+pod:
+  user:
+    cinder:
+      uid: 1000
+  affinity:
+      anti:
+        type:
+          default: preferredDuringSchedulingIgnoredDuringExecution
+        topologyKey:
+          default: kubernetes.io/hostname
+  mounts:
+    cinder_api:
+      init_container: null
+      cinder_api:
+    cinder_scheduler:
+      init_container: null
+      cinder_scheduler:
+    cinder_volume:
+      init_container: null
+      cinder_volume:
+    cinder_volume_usage_audit:
+      init_container: null
+      cinder_volume_usage_audit:
+    cinder_backup:
+      init_container: null
+      cinder_backup:
+    cinder_tests:
+      init_container: null
+      cinder_tests:
+  replicas:
+    api: 1
+    volume: 1
+    scheduler: 1
+    backup: 1
+  lifecycle:
+    upgrades:
+      deployments:
+        revision_history: 3
+        pod_replacement_strategy: RollingUpdate
+        rolling_update:
+          max_unavailable: 1
+          max_surge: 3
+    disruption_budget:
+      api:
+        min_available: 0
+    termination_grace_period:
+      api:
+        timeout: 30
+  resources:
+    enabled: false
+    api:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    scheduler:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    volume:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "1024Mi"
+        cpu: "2000m"
+    jobs:
+      volume_usage_audit:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      bootstrap:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      rabbit_init:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      db_init:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      db_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      db_drop:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      clean:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      backup_storage_init:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      storage_init:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      ks_endpoints:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      ks_service:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      ks_user:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      tests:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+
+bootstrap:
+  enabled: true
+  ks_user: admin
+  bootstrap_conf_backends: true
+  volume_types:
+    name:
+      group:
+      volume_backend_name:
+
+network:
+  api:
+    ingress:
+      public: true
+      annotations:
+        kubernetes.io/ingress.class: "nginx"
+        nginx.ingress.kubernetes.io/rewrite-target: /
+    external_policy_local: false
+    node_port:
+      enabled: false
+      port: 30877
+
+conf:
+  paste:
+    composite:osapi_volume:
+      use: call:cinder.api:root_app_factory
+      /: apiversions
+      /v1: openstack_volume_api_v1
+      /v2: openstack_volume_api_v2
+      /v3: openstack_volume_api_v3
+    composite:openstack_volume_api_v1:
+      use: call:cinder.api.middleware.auth:pipeline_factory
+      noauth: cors http_proxy_to_wsgi request_id faultwrap sizelimit osprofiler noauth apiv1
+      keystone: cors http_proxy_to_wsgi request_id faultwrap sizelimit osprofiler authtoken keystonecontext apiv1
+      keystone_nolimit: cors http_proxy_to_wsgi request_id faultwrap sizelimit osprofiler authtoken keystonecontext apiv1
+    composite:openstack_volume_api_v2:
+      use: call:cinder.api.middleware.auth:pipeline_factory
+      noauth: cors http_proxy_to_wsgi request_id faultwrap sizelimit osprofiler noauth apiv2
+      keystone: cors http_proxy_to_wsgi request_id faultwrap sizelimit osprofiler authtoken keystonecontext apiv2
+      keystone_nolimit: cors http_proxy_to_wsgi request_id faultwrap sizelimit osprofiler authtoken keystonecontext apiv2
+    composite:openstack_volume_api_v3:
+      use: call:cinder.api.middleware.auth:pipeline_factory
+      noauth: cors http_proxy_to_wsgi request_id faultwrap sizelimit osprofiler noauth apiv3
+      keystone: cors http_proxy_to_wsgi request_id faultwrap sizelimit osprofiler authtoken keystonecontext apiv3
+      keystone_nolimit: cors http_proxy_to_wsgi request_id faultwrap sizelimit osprofiler authtoken keystonecontext apiv3
+    filter:request_id:
+      paste.filter_factory: oslo_middleware.request_id:RequestId.factory
+    filter:http_proxy_to_wsgi:
+      paste.filter_factory: oslo_middleware.http_proxy_to_wsgi:HTTPProxyToWSGI.factory
+    filter:cors:
+      paste.filter_factory: oslo_middleware.cors:filter_factory
+      oslo_config_project: cinder
+    filter:faultwrap:
+      paste.filter_factory: cinder.api.middleware.fault:FaultWrapper.factory
+    filter:osprofiler:
+      paste.filter_factory: osprofiler.web:WsgiMiddleware.factory
+    filter:noauth:
+      paste.filter_factory: cinder.api.middleware.auth:NoAuthMiddleware.factory
+    filter:sizelimit:
+      paste.filter_factory: oslo_middleware.sizelimit:RequestBodySizeLimiter.factory
+    app:apiv1:
+      paste.app_factory: cinder.api.v1.router:APIRouter.factory
+    app:apiv2:
+      paste.app_factory: cinder.api.v2.router:APIRouter.factory
+    app:apiv3:
+      paste.app_factory: cinder.api.v3.router:APIRouter.factory
+    pipeline:apiversions:
+      pipeline: cors http_proxy_to_wsgi faultwrap osvolumeversionapp
+    app:osvolumeversionapp:
+      paste.app_factory: cinder.api.versions:Versions.factory
+    filter:keystonecontext:
+      paste.filter_factory: cinder.api.middleware.auth:CinderKeystoneContext.factory
+    filter:authtoken:
+      paste.filter_factory: keystonemiddleware.auth_token:filter_factory
+  policy:
+    context_is_admin: role:admin
+    admin_or_owner: is_admin:True or project_id:%(project_id)s
+    default: rule:admin_or_owner
+    admin_api: is_admin:True
+    volume:create: ''
+    volume:delete: rule:admin_or_owner
+    volume:get: rule:admin_or_owner
+    volume:get_all: rule:admin_or_owner
+    volume:get_volume_metadata: rule:admin_or_owner
+    volume:create_volume_metadata: rule:admin_or_owner
+    volume:delete_volume_metadata: rule:admin_or_owner
+    volume:update_volume_metadata: rule:admin_or_owner
+    volume:get_volume_admin_metadata: rule:admin_api
+    volume:update_volume_admin_metadata: rule:admin_api
+    volume:get_snapshot: rule:admin_or_owner
+    volume:get_all_snapshots: rule:admin_or_owner
+    volume:create_snapshot: rule:admin_or_owner
+    volume:delete_snapshot: rule:admin_or_owner
+    volume:update_snapshot: rule:admin_or_owner
+    volume:get_snapshot_metadata: rule:admin_or_owner
+    volume:delete_snapshot_metadata: rule:admin_or_owner
+    volume:update_snapshot_metadata: rule:admin_or_owner
+    volume:extend: rule:admin_or_owner
+    volume:update_readonly_flag: rule:admin_or_owner
+    volume:retype: rule:admin_or_owner
+    volume:update: rule:admin_or_owner
+    volume_extension:types_manage: rule:admin_api
+    volume_extension:types_extra_specs: rule:admin_api
+    volume_extension:access_types_qos_specs_id: rule:admin_api
+    volume_extension:access_types_extra_specs: rule:admin_api
+    volume_extension:volume_type_access: rule:admin_or_owner
+    volume_extension:volume_type_access:addProjectAccess: rule:admin_api
+    volume_extension:volume_type_access:removeProjectAccess: rule:admin_api
+    volume_extension:volume_type_encryption: rule:admin_api
+    volume_extension:volume_encryption_metadata: rule:admin_or_owner
+    volume_extension:extended_snapshot_attributes: rule:admin_or_owner
+    volume_extension:volume_image_metadata: rule:admin_or_owner
+    volume_extension:quotas:show: ''
+    volume_extension:quotas:update: rule:admin_api
+    volume_extension:quotas:delete: rule:admin_api
+    volume_extension:quota_classes: rule:admin_api
+    volume_extension:quota_classes:validate_setup_for_nested_quota_use: rule:admin_api
+    volume_extension:volume_admin_actions:reset_status: rule:admin_api
+    volume_extension:snapshot_admin_actions:reset_status: rule:admin_api
+    volume_extension:backup_admin_actions:reset_status: rule:admin_api
+    volume_extension:volume_admin_actions:force_delete: rule:admin_api
+    volume_extension:volume_admin_actions:force_detach: rule:admin_api
+    volume_extension:snapshot_admin_actions:force_delete: rule:admin_api
+    volume_extension:backup_admin_actions:force_delete: rule:admin_api
+    volume_extension:volume_admin_actions:migrate_volume: rule:admin_api
+    volume_extension:volume_admin_actions:migrate_volume_completion: rule:admin_api
+    volume_extension:volume_actions:upload_public: rule:admin_api
+    volume_extension:volume_actions:upload_image: rule:admin_or_owner
+    volume_extension:volume_host_attribute: rule:admin_api
+    volume_extension:volume_tenant_attribute: rule:admin_or_owner
+    volume_extension:volume_mig_status_attribute: rule:admin_api
+    volume_extension:hosts: rule:admin_api
+    volume_extension:services:index: rule:admin_api
+    volume_extension:services:update: rule:admin_api
+    volume_extension:volume_manage: rule:admin_api
+    volume_extension:volume_unmanage: rule:admin_api
+    volume_extension:list_manageable: rule:admin_api
+    volume_extension:capabilities: rule:admin_api
+    volume:create_transfer: rule:admin_or_owner
+    volume:accept_transfer: ''
+    volume:delete_transfer: rule:admin_or_owner
+    volume:get_transfer: rule:admin_or_owner
+    volume:get_all_transfers: rule:admin_or_owner
+    volume_extension:replication:promote: rule:admin_api
+    volume_extension:replication:reenable: rule:admin_api
+    volume:failover_host: rule:admin_api
+    volume:freeze_host: rule:admin_api
+    volume:thaw_host: rule:admin_api
+    backup:create: ''
+    backup:delete: rule:admin_or_owner
+    backup:get: rule:admin_or_owner
+    backup:get_all: rule:admin_or_owner
+    backup:restore: rule:admin_or_owner
+    backup:backup-import: rule:admin_api
+    backup:backup-export: rule:admin_api
+    backup:update: rule:admin_or_owner
+    snapshot_extension:snapshot_actions:update_snapshot_status: ''
+    snapshot_extension:snapshot_manage: rule:admin_api
+    snapshot_extension:snapshot_unmanage: rule:admin_api
+    snapshot_extension:list_manageable: rule:admin_api
+    consistencygroup:create: group:nobody
+    consistencygroup:delete: group:nobody
+    consistencygroup:update: group:nobody
+    consistencygroup:get: group:nobody
+    consistencygroup:get_all: group:nobody
+    consistencygroup:create_cgsnapshot: group:nobody
+    consistencygroup:delete_cgsnapshot: group:nobody
+    consistencygroup:get_cgsnapshot: group:nobody
+    consistencygroup:get_all_cgsnapshots: group:nobody
+    group:group_types_manage: rule:admin_api
+    group:group_types_specs: rule:admin_api
+    group:access_group_types_specs: rule:admin_api
+    group:group_type_access: rule:admin_or_owner
+    group:create: ''
+    group:delete: rule:admin_or_owner
+    group:update: rule:admin_or_owner
+    group:get: rule:admin_or_owner
+    group:get_all: rule:admin_or_owner
+    group:create_group_snapshot: ''
+    group:delete_group_snapshot: rule:admin_or_owner
+    group:update_group_snapshot: rule:admin_or_owner
+    group:get_group_snapshot: rule:admin_or_owner
+    group:get_all_group_snapshots: rule:admin_or_owner
+    scheduler_extension:scheduler_stats:get_pools: rule:admin_api
+    message:delete: rule:admin_or_owner
+    message:get: rule:admin_or_owner
+    message:get_all: rule:admin_or_owner
+    clusters:get: rule:admin_api
+    clusters:get_all: rule:admin_api
+    clusters:update: rule:admin_api
+  cinder_sudoers:
+    override:
+    append:
+  rootwrap:
+    override:
+    append:
+  rootwrap_filters:
+    volume:
+      override:
+      append:
+  ceph:
+    override:
+    append:
+    monitors: []
+    admin_keyring: null
+  cinder:
+    DEFAULT:
+      use_syslog: false
+      use_stderr: true
+      enable_v1_api: false
+      volume_name_template: "%s"
+      osapi_volume_workers: 8
+      glance_api_version: 2
+      os_region_name: RegionOne
+      host: cinder-volume-worker
+      #NOTE(portdirect): the bind port should not be defined, and is manipulated
+      # via the endpoints section.
+      osapi_volume_listen_port: null
+      enabled_backends: "rbd1"
+      # NOTE(portdirect): "cinder.backup.drivers.swift"  and
+      # "cinder.backup.drivers.posix" also supported
+      backup_driver: "cinder.backup.drivers.ceph"
+      # Backup: Ceph RBD options
+      backup_ceph_conf: "/etc/ceph/ceph.conf"
+      backup_ceph_user: cinderbackup
+      backup_ceph_pool: cinder.backups
+      # Backup: Posix options
+      backup_posix_path: /var/lib/cinder/backup
+    database:
+      max_retries: -1
+    keystone_authtoken:
+      auth_version: v3
+      auth_type: password
+      memcache_security_strategy: ENCRYPT
+    oslo_concurrency:
+      lock_path: "/var/lib/cinder/tmp"
+    oslo_messaging_notifications:
+      driver: messagingv2
+    coordination:
+      backend_url: file:///var/lib/cinder/coordination
+  backends:
+    # Those options will be written to backends.conf as-is.
+    rbd1:
+      volume_driver: cinder.volume.drivers.rbd.RBDDriver
+      volume_backend_name: rbd1
+      rbd_pool: cinder.volumes
+      rbd_ceph_conf: "/etc/ceph/ceph.conf"
+      rbd_flatten_volume_from_snapshot: false
+      rbd_max_clone_depth: 5
+      rbd_store_chunk_size: 4
+      rados_connect_timeout: -1
+      rbd_user: cinder
+  rally_tests:
+    run_tempest: false
+    tests:
+      CinderVolumes.create_and_delete_volume:
+        - args:
+            size: 1
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
+        - args:
+            size:
+              max: 5
+              min: 1
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
+
+backup:
+  posix:
+    volume:
+      class_name: general
+      size: 10Gi
+
+dependencies:
+  static:
+    api:
+      jobs:
+        - cinder-db-sync
+        - cinder-ks-user
+        - cinder-ks-endpoints
+        - cinder-storage-init
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
+    backup:
+      jobs:
+        - cinder-db-sync
+        - cinder-ks-user
+        - cinder-ks-endpoints
+        - cinder-storage-init
+        - cinder-backup-storage-init
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: volume
+    backup_storage_init:
+      jobs: null
+    bootstrap:
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: volume
+    clean:
+      jobs: null
+    db_drop:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_init:
+      services:
+        - endpoint: internal
+          service: oslo_db
+    db_sync:
+      jobs:
+        - cinder-db-init
+      services:
+        - endpoint: internal
+          service: oslo_db
+    ks_endpoints:
+      jobs:
+        - cinder-ks-service
+      services:
+        - endpoint: internal
+          service: identity
+    ks_service:
+      services:
+        - endpoint: internal
+          service: identity
+    ks_user:
+      services:
+        - endpoint: internal
+          service: identity
+    rabbit_init:
+      services:
+      - service: oslo_messaging
+        endpoint: internal
+    scheduler:
+      jobs:
+        - cinder-db-sync
+        - cinder-ks-user
+        - cinder-ks-endpoints
+        - cinder-storage-init
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: volume
+    storage_init:
+      jobs: null
+    tests:
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: volume
+    volume:
+      jobs:
+        - cinder-db-sync
+        - cinder-ks-user
+        - cinder-ks-endpoints
+        - cinder-storage-init
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: volume
+    volume_usage_audit:
+      jobs:
+        - cinder-db-sync
+        - cinder-ks-user
+        - cinder-ks-endpoints
+        - cinder-storage-init
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: volume
+
+# Names of secrets used by bootstrap and environmental checks
+secrets:
+  identity:
+    admin: cinder-keystone-admin
+    cinder: cinder-keystone-user
+    test: cinder-keystone-test
+  oslo_db:
+    admin: cinder-db-admin
+    cinder: cinder-db-user
+  rbd:
+    backup: cinder-backup-rbd-keyring
+    volume: cinder-volume-rbd-keyring
+  oslo_messaging:
+    admin: cinder-rabbitmq-admin
+    cinder: cinder-rabbitmq-user
+
+# We use a different layout of the endpoints here to account for versioning
+# this swaps the service name and type, and should be rolled out to other
+# services.
+endpoints:
+  cluster_domain_suffix: cluster.local
+  identity:
+    name: keystone
+    auth:
+      admin:
+        region_name: RegionOne
+        username: admin
+        password: password
+        project_name: admin
+        user_domain_name: default
+        project_domain_name: default
+      cinder:
+        role: admin
+        region_name: RegionOne
+        username: cinder
+        password: password
+        project_name: service
+        user_domain_name: default
+        project_domain_name: default
+      test:
+        role: admin
+        region_name: RegionOne
+        username: test
+        password: password
+        project_name: test
+        user_domain_name: default
+        project_domain_name: default
+    hosts:
+      default: keystone-api
+      public: keystone
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v3
+    scheme:
+      default: http
+    port:
+      admin:
+        default: 35357
+      api:
+        default: 80
+  image:
+    name: glance
+    hosts:
+      default: glance-api
+      public: glance
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme:
+      default: http
+    port:
+      api:
+        default: 9292
+        public: 80
+  image_registry:
+    name: glance-registry
+    hosts:
+      default: glance-registry
+      public: glance-reg
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme:
+      default: 'http'
+    port:
+      api:
+        default: 9191
+        public: 80
+  volume:
+    name: cinder
+    hosts:
+      default: cinder-api
+      public: cinder
+    host_fqdn_override:
+      default: null
+    path:
+      default: '/v1/%(tenant_id)s'
+    scheme:
+      default:  'http'
+    port:
+      api:
+        default: 8776
+        public: 80
+  volumev2:
+    name: cinder
+    hosts:
+      default: cinder-api
+      public: cinder
+    host_fqdn_override:
+      default: null
+    path:
+      default: '/v2/%(tenant_id)s'
+    scheme:
+      default:  'http'
+    port:
+      api:
+        default: 8776
+        public: 80
+  volumev3:
+    name: cinder
+    hosts:
+      default: cinder-api
+      public: cinder
+    host_fqdn_override:
+      default: null
+    path:
+      default: '/v3/%(tenant_id)s'
+    scheme:
+      default: 'http'
+    port:
+      api:
+        default: 8776
+        public: 80
+  oslo_db:
+    auth:
+      admin:
+        username: root
+        password: password
+      cinder:
+        username: cinder
+        password: password
+    hosts:
+      default: mariadb
+    host_fqdn_override:
+      default: null
+    path: /cinder
+    scheme: mysql+pymysql
+    port:
+      mysql:
+        default: 3306
+  oslo_messaging:
+    auth:
+      admin:
+        username: rabbitmq
+        password: password
+      cinder:
+        username: cinder
+        password: password
+    hosts:
+      default: rabbitmq
+    host_fqdn_override:
+      default: null
+    path: /
+    scheme: rabbit
+    port:
+      amqp:
+        default: 5672
+      http:
+        default: 15672
+  oslo_cache:
+    auth:
+      # NOTE(portdirect): this is used to define the value for keystone
+      # authtoken cache encryption key, if not set it will be populated
+      # automatically with a random value, but to take advantage of
+      # this feature all services should be set to use the same key,
+      # and memcache service.
+      memcache_secret_key: null
+    hosts:
+      default: memcached
+    host_fqdn_override:
+      default: null
+    port:
+      memcache:
+        default: 11211
+
+manifests:
+  configmap_bin: true
+  configmap_etc: true
+  cron_volume_usage_audit: true
+  deployment_api: true
+  deployment_backup: true
+  deployment_scheduler: true
+  deployment_volume: true
+  ingress_api: true
+  job_backup_storage_init: true
+  job_bootstrap: true
+  job_clean: true
+  job_db_init: true
+  job_rabbit_init: true
+  job_db_sync: true
+  job_db_drop: false
+  job_ks_endpoints: true
+  job_ks_service: true
+  job_ks_user: true
+  job_storage_init: true
+  pdb_api: true
+  pod_rally_test: true
+  pvc_backup: true
+  secret_db: true
+  secret_keystone: true
+  secret_rabbitmq: true
+  service_api: true
+  service_ingress_api: true

@@ -1,0 +1,43 @@
+{{/*
+Copyright 2017 The Openstack-Helm Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/}}
+
+{{- if .Values.manifests.configmap_etc }}
+{{- $envAll := . }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: horizon-etc
+data:
+  horizon.conf: |
+{{ tuple "etc/_horizon.conf.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  local_settings: |
+{{ tuple "etc/_local_settings.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  ceilometer_policy.json: |
+{{  toJson .Values.conf.ceilometer_policy | indent 4 }}
+  cinder_policy.json: |
+{{  toJson .Values.conf.cinder_policy | indent 4 }}
+  glance_policy.json: |
+{{  toJson .Values.conf.glance_policy | indent 4 }}
+  heat_policy.json: |
+{{  toJson .Values.conf.heat_policy | indent 4 }}
+  keystone_policy.json: |
+{{  toJson .Values.conf.keystone_policy | indent 4 }}
+  neutron_policy.json: |
+{{  toJson .Values.conf.neutron_policy | indent 4 }}
+  nova_policy.json: |
+{{  toJson .Values.conf.nova_policy | indent 4 }}
+{{- end }}
