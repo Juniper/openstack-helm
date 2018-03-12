@@ -14,7 +14,7 @@
 
 images:
   tags:
-    opencontrail_heat_init: docker.io/opencontrailnightly/contrail-openstack-heat-init:master-centos7-ocata-bld-13
+    opencontrail_heat_init: docker.io/opencontrailnightly/contrail-openstack-heat-init:ocata-master-19
 
 conf:
   heat:
