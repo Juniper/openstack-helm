@@ -26,28 +26,30 @@ if [ "$OPENSTACK_VERSION" == "ocata" ]; then
 else
   values=""
 fi
-: ${OSH_EXTRA_HELM_ARGS:=""}
+
 if [ "x$(systemd-detect-virt)" == "xnone" ]; then
   echo 'OSH is not being deployed in virtualized environment'
   helm upgrade --install nova ./nova \
       --namespace=openstack $values \
       --values=./tools/overrides/backends/opencontrail/nova.yaml \
-      ${OSH_EXTRA_HELM_ARGS}
+      ${OSH_EXTRA_HELM_ARGS} \
+      ${OSH_EXTRA_HELM_ARGS_NOVA}
 else
   echo 'OSH is being deployed in virtualized environment, using qemu for nova'
   helm upgrade --install nova ./nova \
       --namespace=openstack $values \
       --set conf.nova.libvirt.virt_type=qemu \
       --values=./tools/overrides/backends/opencontrail/nova.yaml \
-      ${OSH_EXTRA_HELM_ARGS}
+      ${OSH_EXTRA_HELM_ARGS} \
+      ${OSH_EXTRA_HELM_ARGS_NOVA}
 fi
 
 #NOTE: Deploy neutron
 helm upgrade --install neutron ./neutron \
     --namespace=openstack $values \
-    --values=/tmp/neutron.yaml \
     --values=./tools/overrides/backends/opencontrail/neutron.yaml \
-    ${OSH_EXTRA_HELM_ARGS}
+    ${OSH_EXTRA_HELM_ARGS} \
+    ${OSH_EXTRA_HELM_ARGS_NEUTRON}
 
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack

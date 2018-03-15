@@ -34,7 +34,9 @@ EOF
 helm upgrade --install heat ./heat \
   --namespace=openstack $values \
   --values=/tmp/heat.yaml \
-  --values=./tools/overrides/backends/opencontrail/heat.yaml
+  --values=./tools/overrides/backends/opencontrail/heat.yaml \
+  ${OSH_EXTRA_HELM_ARGS} \
+  ${OSH_EXTRA_HELM_ARGS_HEAT}
 
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack

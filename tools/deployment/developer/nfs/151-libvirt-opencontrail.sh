@@ -18,20 +18,20 @@ set -xe
 #NOTE: Pull images and lint chart
 make pull-images libvirt
 
-#NOTE: Deploy command
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
 if [ "$OPENSTACK_VERSION" == "ocata" ]; then
   values="--values=./tools/overrides/releases/ocata/loci.yaml "
 else
   values=""
 fi
-OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
-: ${OSH_EXTRA_HELM_ARGS:=""}
+
+#NOTE: Deploy command
 helm upgrade --install libvirt ./libvirt \
   --namespace=openstack $values \
   --values=./tools/overrides/backends/opencontrail/libvirt.yaml \
   --set ceph.enabled=false \
-  ${OSH_EXTRA_HELM_ARGS}
+  ${OSH_EXTRA_HELM_ARGS} \
+  ${OSH_EXTRA_HELM_ARGS_LIBVIRT}
 
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack

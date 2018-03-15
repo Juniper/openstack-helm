@@ -16,9 +16,8 @@
 set -xe
 
 #NOTE: Pull images and lint chart
-make pull-images libvirt
+make pull-images neutron
 
-#NOTE: Deploy command
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
 if [ "$OPENSTACK_VERSION" == "ocata" ]; then
   values="--values=./tools/overrides/releases/ocata/loci.yaml "
@@ -26,14 +25,14 @@ else
   values=""
 fi
 
-helm upgrade --install libvirt ./libvirt \
-  --namespace=openstack $values \
-  --values=./tools/overrides/backends/opencontrail/libvirt.yaml \
-  ${OSH_EXTRA_HELM_ARGS} \
-  ${OSH_EXTRA_HELM_ARGS_LIBVIRT}
+: ${OSH_EXTRA_HELM_ARGS:-""}
+#NOTE: Upgrade neutron
+helm upgrade --install neutron ./neutron \
+    --namespace=openstack $values \
+    --values=./tools/overrides/backends/opencontrail/neutron.yaml \
+    --values=./tools/overrides/backends/opencontrail/neutron-rbac.yaml \
+    ${OSH_EXTRA_HELM_ARGS} \
+    ${OSH_EXTRA_HELM_ARGS_NEUTRON}
 
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack
-
-#NOTE: Validate Deployment info
-helm status libvirt

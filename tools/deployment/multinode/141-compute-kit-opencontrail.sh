@@ -43,14 +43,18 @@ if [ "x$(systemd-detect-virt)" == "xnone" ]; then
   helm upgrade --install nova ./nova \
       --namespace=openstack $values \
       --values=/tmp/nova.yaml \
-      --values=./tools/overrides/backends/opencontrail/nova.yaml
+      --values=./tools/overrides/backends/opencontrail/nova.yaml \
+      ${OSH_EXTRA_HELM_ARGS} \
+      ${OSH_EXTRA_HELM_ARGS_NOVA}
 else
   echo 'OSH is being deployed in virtualized environment, using qemu for nova'
   helm upgrade --install nova ./nova \
       --namespace=openstack $values \
       --values=/tmp/nova.yaml \
       --values=./tools/overrides/backends/opencontrail/nova.yaml \
-      --set conf.nova.libvirt.virt_type=qemu
+      --set conf.nova.libvirt.virt_type=qemu \
+      ${OSH_EXTRA_HELM_ARGS} \
+      ${OSH_EXTRA_HELM_ARGS_NOVA}
 fi
 
 #NOTE: Deploy neutron
@@ -79,7 +83,9 @@ EOF
 helm upgrade --install neutron ./neutron \
     --namespace=openstack $values \
     --values=/tmp/neutron.yaml \
-    --values=./tools/overrides/backends/opencontrail/neutron.yaml
+    --values=./tools/overrides/backends/opencontrail/neutron.yaml \
+    ${OSH_EXTRA_HELM_ARGS} \
+    ${OSH_EXTRA_HELM_ARGS_NEUTRON}
 
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack

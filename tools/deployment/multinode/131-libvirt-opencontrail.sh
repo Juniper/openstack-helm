@@ -25,7 +25,9 @@ fi
 #NOTE: Deploy command
 helm upgrade --install libvirt ./libvirt \
   --namespace=openstack $values \
-  --values=./tools/overrides/backends/opencontrail/libvirt.yaml
+  --values=./tools/overrides/backends/opencontrail/libvirt.yaml \
+  ${OSH_EXTRA_HELM_ARGS} \
+  ${OSH_EXTRA_HELM_ARGS_LIBVIRT}
 
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack

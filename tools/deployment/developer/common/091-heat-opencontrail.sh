@@ -25,11 +25,11 @@ if [ "$OPENSTACK_VERSION" == "ocata" ]; then
 else
   values=""
 fi
-: ${OSH_EXTRA_HELM_ARGS:=""}
 helm upgrade --install heat ./heat \
   --namespace=openstack $values \
   --values=./tools/overrides/backends/opencontrail/heat.yaml \
-  ${OSH_EXTRA_HELM_ARGS}
+  ${OSH_EXTRA_HELM_ARGS} \
+  ${OSH_EXTRA_HELM_ARGS_HEAT}
 
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack
