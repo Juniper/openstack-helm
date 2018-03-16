@@ -41,5 +41,4 @@ manifests:
   daemonset_dhcp_agent: false
   daemonset_l3_agent: false
   daemonset_lb_agent: false
-  daemonset_metadata_agent: false
   daemonset_ovs_agent: false
