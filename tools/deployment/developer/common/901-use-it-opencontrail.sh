@@ -60,8 +60,10 @@ FLOATING_IP=$(openstack stack output show \
     -f value -c output_value)
 
 # TODO: provision simple gateway to allow work with floating IP-s
-# TODO: detect link-local IP smartly
-FLOATING_IP=169.254.0.5
+
+# TODO: fix this in case of many VM-s/devices
+if_name=$(ip link | grep -io "tap[0-9a-z-]*")
+FLOATING_IP=$(curl -s http://127.0.0.1:8085/Snh_ItfReq?name=$if_name | sed 's/^.*<mdata_ip_addr.*>\([0-9\.]*\)<.mdata_ip_addr>.*$/\1/')
 
 function wait_for_ssh_port {
   # Default wait timeout is 300 seconds
