@@ -22,4 +22,4 @@ conf:
       plugin_dirs: /opt/plugin/site-packages/vnc_api/gen/heat/resources,/opt/plugin/site-packages/contrail_heat/resources
     clients_contrail:
       api_base_url: /
-      api_server: contrail-config-api.contrail
+      api_server: config-api-server.contrail
