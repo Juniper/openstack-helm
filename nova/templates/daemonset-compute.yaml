@@ -235,6 +235,26 @@ spec:
               mountPath: /opt/plugin
               readOnly: true
             {{- end }}
+            {{- if eq .Values.compute_patch }}
+            {{/* These two mounts for kolla images  */}}
+            - name: nova-bin
+              mountPath: /var/lib/kolla/venv/local/lib/python2.7/site-packages/nova/network/model.py
+              subPath: compute-patch-ocata-model.py
+              readOnly: true
+            - name: nova-bin
+              mountPath: /var/lib/kolla/venv/local/lib/python2.7/site-packages/nova/network/os_vif_util.py
+              subPath: compute-patch-ocata-os_vif_util.py
+              readOnly: true
+            {{/* These two mounts for loci images  */}}
+            - name: nova-bin
+              mountPath: /var/lib/openstack/local/lib/python2.7/site-packages/nova/network/model.py
+              subPath: compute-patch-ocata-model.py
+              readOnly: true
+            - name: nova-bin
+              mountPath: /var/lib/openstack/local/lib/python2.7/site-packages/nova/network/os_vif_util.py
+              subPath: compute-patch-ocata-os_vif_util.py
+              readOnly: true
+            {{- end }}
 {{ if $mounts_nova_compute.volumeMounts }}{{ toYaml $mounts_nova_compute.volumeMounts | indent 12 }}{{ end }}
         - name: nova-compute-ssh
           image: {{ .Values.images.tags.nova_compute_ssh }}
