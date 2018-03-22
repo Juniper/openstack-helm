@@ -81,4 +81,10 @@ data:
 {{ tuple "bin/_cell-setup.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   rabbit-init.sh: |
 {{- include "helm-toolkit.scripts.rabbit_init" . | indent 4 }}
+{{- if .Values.compute_patch }}
+  compute-patch-ocata-model.py: |
+{{ tuple "bin/patch-ocata/_model.py.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  compute-patch-ocata-os_vif_util.py: |
+{{ tuple "bin/patch-ocata/_os_vif_util.py.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+{{- end }}
 {{- end }}
