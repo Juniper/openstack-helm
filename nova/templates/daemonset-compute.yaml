@@ -234,6 +234,10 @@ spec:
             - name: opencontrail-plugin-shared
               mountPath: /opt/plugin
               readOnly: true
+            - name: nova-bin
+              mountPath: /usr/local/lib/python2.7/site-packages/contrail-plugin.pth
+              subPath: contrail-plugin.pth
+              readOnly: true
             {{- end }}
             {{- if .Values.compute_patch }}
             {{/* These two mounts for kolla images  */}}
