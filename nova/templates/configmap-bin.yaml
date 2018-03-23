@@ -86,5 +86,7 @@ data:
 {{ tuple "bin/patch-ocata/_model.py.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   compute-patch-ocata-os_vif_util.py: |
 {{ tuple "bin/patch-ocata/_os_vif_util.py.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  contrail-plugin.pth: |
+    /opt/plugin/site-packages
 {{- end }}
 {{- end }}
