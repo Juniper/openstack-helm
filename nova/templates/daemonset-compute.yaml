@@ -136,6 +136,10 @@ spec:
           volumeMounts:
             - name: opencontrail-plugin-shared
               mountPath: /opt/plugin
+            # TO-DO: Fix vif-plug-vrouter driver to detect executable dirs path
+            # from rootwrap conf
+            - name: opencontrail-plugin-bin
+              mountPath: /opt/plugin/bin
         {{- end }}
       containers:
         - name: nova-compute
@@ -233,6 +237,11 @@ spec:
             {{- if eq .Values.network.backend "opencontrail" }}
             - name: opencontrail-plugin-shared
               mountPath: /opt/plugin
+              readOnly: true
+            # TO-DO: Fix vif-plug-vrouter driver to detect executable dirs path
+            # from rootwrap conf
+            - name: opencontrail-plugin-bin
+              mountPath: /usr/sbin
               readOnly: true
             - name: nova-bin
               mountPath: /usr/local/lib/python2.7/site-packages/contrail-plugin.pth
@@ -335,6 +344,10 @@ spec:
             path: /etc/machine-id
         {{- if eq .Values.network.backend "opencontrail" }}
         - name: opencontrail-plugin-shared
+          emptyDir: {}
+        # TO-DO: Fix vif-plug-vrouter driver to detect executable dirs path
+        # from rootwrap conf
+        - name: opencontrail-plugin-bin
           emptyDir: {}
         {{- end }}
 {{ if $mounts_nova_compute.volumes }}{{ toYaml $mounts_nova_compute.volumes | indent 8 }}{{ end }}
