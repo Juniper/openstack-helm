@@ -22,12 +22,41 @@ else
   values=""
 fi
 
+HUGE_PAGES_DIR=${HUGE_PAGES_DIR:-""}
+if [[ ! -z "$HUGE_PAGES_DIR" ]]; then
+tee /tmp/libvirt_mount.yaml << EOF
+pod:
+  mounts:
+    libvirt:
+      libvirt:
+        volumeMounts:
+          - name: hugepages-dir
+            mountPath: $HUGE_PAGES_DIR
+        volumes:
+          - name: hugepages-dir
+            hostPath:
+              path: $HUGE_PAGES_DIR
+EOF
+fi
+
+
 #NOTE: Deploy command
-helm upgrade --install libvirt ./libvirt \
-  --namespace=openstack $values \
-  --values=./tools/overrides/backends/opencontrail/libvirt.yaml \
-  ${OSH_EXTRA_HELM_ARGS} \
-  ${OSH_EXTRA_HELM_ARGS_LIBVIRT}
+if [[ -z "$HUGE_PAGES_DIR" ]]; then
+  echo "Libvirt is being deployed"
+  helm upgrade --install libvirt ./libvirt \
+    --namespace=openstack $values \
+    --values=./tools/overrides/backends/opencontrail/libvirt.yaml \
+    ${OSH_EXTRA_HELM_ARGS} \
+    ${OSH_EXTRA_HELM_ARGS_LIBVIRT}
+else
+  echo "Libvirt is being deployed, with hugepages mount directory"
+  helm upgrade --install libvirt ./libvirt \
+    --namespace=openstack $values \
+    --values=./tools/overrides/backends/opencontrail/libvirt.yaml \
+    --values=/tmp/libvirt_mount.yaml \
+    ${OSH_EXTRA_HELM_ARGS} \
+    ${OSH_EXTRA_HELM_ARGS_LIBVIRT}
+fi
 
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack
