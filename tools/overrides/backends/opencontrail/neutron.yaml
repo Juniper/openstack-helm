@@ -14,7 +14,7 @@
 
 images:
   tags:
-    opencontrail_neutron_init: docker.io/opencontrailnightly/contrail-openstack-neutron-init:ocata-master-17
+    opencontrail_neutron_init: docker.io/opencontrailnightly/contrail-openstack-neutron-init:ocata-master-43
 
 network:
   backend: opencontrail

@@ -16,7 +16,7 @@
 
 images:
   tags:
-    opencontrail_compute_init: docker.io/opencontrailnightly/contrail-openstack-compute-init:ocata-master-17
+    opencontrail_compute_init: docker.io/opencontrailnightly/contrail-openstack-compute-init:ocata-master-43
 
 network:
   backend: opencontrail
