@@ -14,7 +14,7 @@
 
 images:
   tags:
-    opencontrail_heat_init: docker.io/opencontrailnightly/contrail-openstack-heat-init:ocata-master-43
+    opencontrail_heat_init: docker.io/opencontrailnightly/contrail-openstack-heat-init:ocata-master-46
 
 conf:
   heat:
