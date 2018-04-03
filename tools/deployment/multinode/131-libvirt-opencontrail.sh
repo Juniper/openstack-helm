@@ -18,8 +18,7 @@ set -xe
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
 if [ "$OPENSTACK_VERSION" == "ocata" ]; then
   values="--values=./tools/overrides/releases/ocata/loci.yaml "
-else
-  values=""
+  values+="--values=./tools/overrides/backends/opencontrail/libvirt-ocata.yaml "
 fi
 
 HUGE_PAGES_DIR=${HUGE_PAGES_DIR:-""}
@@ -37,26 +36,20 @@ pod:
             hostPath:
               path: $HUGE_PAGES_DIR
 EOF
+values+="--values=/tmp/libvirt_mount.yaml "
 fi
 
+# Append $values to OSH_EXTRA_HELM_ARGS_LIBVIRT
+OSH_EXTRA_HELM_ARGS_LIBVIRT=$OSH_EXTRA_HELM_ARGS_LIBVIRT" $values"
 
 #NOTE: Deploy command
-if [[ -z "$HUGE_PAGES_DIR" ]]; then
-  echo "Libvirt is being deployed"
-  helm upgrade --install libvirt ./libvirt \
-    --namespace=openstack $values \
-    --values=./tools/overrides/backends/opencontrail/libvirt.yaml \
-    ${OSH_EXTRA_HELM_ARGS} \
-    ${OSH_EXTRA_HELM_ARGS_LIBVIRT}
-else
-  echo "Libvirt is being deployed, with hugepages mount directory"
-  helm upgrade --install libvirt ./libvirt \
-    --namespace=openstack $values \
-    --values=./tools/overrides/backends/opencontrail/libvirt.yaml \
-    --values=/tmp/libvirt_mount.yaml \
-    ${OSH_EXTRA_HELM_ARGS} \
-    ${OSH_EXTRA_HELM_ARGS_LIBVIRT}
-fi
+echo "Libvirt is being deployed, with hugepages mount directory"
+helm upgrade --install libvirt ./libvirt \
+  --namespace=openstack \
+  --values=./tools/overrides/backends/opencontrail/libvirt.yaml \
+  --values=/tmp/libvirt_mount.yaml \
+  ${OSH_EXTRA_HELM_ARGS} \
+  ${OSH_EXTRA_HELM_ARGS_LIBVIRT}
 
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack

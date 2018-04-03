@@ -1,0 +1,41 @@
+#!/bin/bash
+
+# Copyright 2017 The Openstack-Helm Authors.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
+
+# Loci nova images does not work with kolla's ocata libvirt container
+# hence using kolla images for nova services
+
+images:
+  tags:
+    nova_api: 'docker.io/kolla/ubuntu-source-nova-api:ocata'
+    nova_cell_setup: 'docker.io/kolla/ubuntu-source-nova-api:ocata'
+    nova_compute: 'docker.io/kolla/ubuntu-source-nova-compute:ocata'
+    nova_compute_ironic: 'docker.io/kolla/ubuntu-source-nova-compute-ironic:ocata'
+    nova_compute_ssh: 'docker.io/kolla/ubuntu-source-nova-ssh:ocata'
+    nova_conductor: 'docker.io/kolla/ubuntu-source-nova-conductor:ocata'
+    nova_consoleauth: 'docker.io/kolla/ubuntu-source-nova-consoleauth:ocata'
+    nova_db_sync: 'docker.io/kolla/ubuntu-source-nova-api:ocata'
+    nova_novncproxy: 'docker.io/kolla/ubuntu-source-nova-novncproxy:ocata'
+    nova_novncproxy_assets: 'docker.io/kolla/ubuntu-source-nova-novncproxy:ocata'
+    nova_placement: 'docker.io/kolla/ubuntu-source-nova-placement-api:ocata'
+    nova_scheduler: 'docker.io/kolla/ubuntu-source-nova-scheduler:ocata'
+    nova_spiceproxy: 'docker.io/kolla/ubuntu-source-nova-spicehtml5proxy:ocata'
+    nova_spiceproxy_assets: 'docker.io/kolla/ubuntu-source-nova-spicehtml5proxy:ocata'
+
+# setting nova uid for kolla images
+pod:
+  user:
+    nova:
+      uid: 42436
