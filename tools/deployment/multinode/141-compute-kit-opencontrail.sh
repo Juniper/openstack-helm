@@ -18,9 +18,11 @@ set -xe
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
 if [ "$OPENSTACK_VERSION" == "ocata" ]; then
   values="--values=./tools/overrides/releases/ocata/loci.yaml "
-else
-  values=""
+  values+="--values=./tools/overrides/backends/opencontrail/nova-ocata.yaml "
 fi
+
+# Append $values to OSH_EXTRA_HELM_ARGS_NOVA
+OSH_EXTRA_HELM_ARGS_NOVA=$OSH_EXTRA_HELM_ARGS_NOVA" $values"
 
 #NOTE: Deploy nova
 tee /tmp/nova.yaml << EOF

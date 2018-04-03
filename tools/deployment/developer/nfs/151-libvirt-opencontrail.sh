@@ -21,9 +21,29 @@ make pull-images libvirt
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
 if [ "$OPENSTACK_VERSION" == "ocata" ]; then
   values="--values=./tools/overrides/releases/ocata/loci.yaml "
-else
-  values=""
+  values+="--values=./tools/overrides/backends/opencontrail/libvirt-ocata.yaml "
 fi
+
+HUGE_PAGES_DIR=${HUGE_PAGES_DIR:-""}
+if [[ ! -z "$HUGE_PAGES_DIR" ]]; then
+tee /tmp/libvirt_mount.yaml << EOF
+pod:
+  mounts:
+    libvirt:
+      libvirt:
+        volumeMounts:
+          - name: hugepages-dir
+            mountPath: $HUGE_PAGES_DIR
+        volumes:
+          - name: hugepages-dir
+            hostPath:
+              path: $HUGE_PAGES_DIR
+EOF
+values+="--values=/tmp/libvirt_mount.yaml "
+fi
+
+# Append $values to OSH_EXTRA_HELM_ARGS_LIBVIRT
+OSH_EXTRA_HELM_ARGS_LIBVIRT=$OSH_EXTRA_HELM_ARGS_LIBVIRT" $values"
 
 #NOTE: Deploy command
 helm upgrade --install libvirt ./libvirt \
