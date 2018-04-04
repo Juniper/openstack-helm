@@ -47,7 +47,6 @@ echo "Libvirt is being deployed, with hugepages mount directory"
 helm upgrade --install libvirt ./libvirt \
   --namespace=openstack \
   --values=./tools/overrides/backends/opencontrail/libvirt.yaml \
-  --values=/tmp/libvirt_mount.yaml \
   ${OSH_EXTRA_HELM_ARGS} \
   ${OSH_EXTRA_HELM_ARGS_LIBVIRT}
 
