@@ -19,10 +19,3 @@
 images:
   tags:
     libvirt: "docker.io/kolla/ubuntu-binary-nova-libvirt:ocata"
-    # Using nova user, as nova user is in qemu group
-
-conf:
-  qemu:
-    # https://github.com/openstack/kolla/commit/14cda91c4ef7020ac43f430869798387de15dae4
-    user: "nova"
-    group: "nova"
