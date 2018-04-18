@@ -25,6 +25,8 @@ spec:
   ports:
   - port: {{ tuple "oslo_messaging" "internal" "amqp" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
     name: amqp
+  - port: {{ add (tuple "oslo_messaging" "internal" "amqp" . | include "helm-toolkit.endpoints.endpoint_port_lookup") 20000 }}
+    name: clustering
   - port: {{ tuple "oslo_messaging" "internal" "http" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
     name: http
   selector:

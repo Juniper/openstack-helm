@@ -31,7 +31,7 @@ sudo docker exec docker-in-docker docker build --force-rm --pull --no-cache \
     --build-arg PROJECT=keystone \
     --build-arg FROM=gcr.io/google_containers/ubuntu-slim:0.14 \
     --build-arg PROJECT_REF=${OPENSTACK_VERSION} \
-    --build-arg PROFILES="apache" \
+    --build-arg PROFILES="apache ldap" \
     --build-arg PIP_PACKAGES="pycrypto python-openstackclient" \
     --build-arg WHEELS=openstackhelm/requirements:${IMAGE_TAG} \
     --tag docker.io/openstackhelm/keystone:${IMAGE_TAG}
@@ -51,6 +51,16 @@ sudo docker exec docker-in-docker docker push docker.io/openstackhelm/heat:${IMA
 
 sudo docker exec docker-in-docker docker build --force-rm --pull --no-cache \
     https://git.openstack.org/openstack/loci.git \
+    --build-arg PROJECT=barbican \
+    --build-arg FROM=gcr.io/google_containers/ubuntu-slim:0.14 \
+    --build-arg PROJECT_REF=${OPENSTACK_VERSION} \
+    --build-arg PIP_PACKAGES="pycrypto" \
+    --build-arg WHEELS=openstackhelm/requirements:${IMAGE_TAG} \
+    --tag docker.io/openstackhelm/barbican:${IMAGE_TAG}
+sudo docker exec docker-in-docker docker push docker.io/openstackhelm/barbican:${IMAGE_TAG}
+
+sudo docker exec docker-in-docker docker build --force-rm --pull --no-cache \
+    https://git.openstack.org/openstack/loci.git \
     --build-arg PROJECT=glance \
     --build-arg FROM=gcr.io/google_containers/ubuntu-slim:0.14 \
     --build-arg PROJECT_REF=${OPENSTACK_VERSION} \
@@ -65,7 +75,7 @@ sudo docker exec docker-in-docker docker build --force-rm --pull --no-cache \
     --build-arg PROJECT=cinder \
     --build-arg FROM=gcr.io/google_containers/ubuntu-slim:0.14 \
     --build-arg PROJECT_REF=${OPENSTACK_VERSION} \
-    --build-arg PROFILES="cinder lvm ceph" \
+    --build-arg PROFILES="cinder lvm ceph qemu" \
     --build-arg PIP_PACKAGES="pycrypto python-swiftclient" \
     --build-arg WHEELS=openstackhelm/requirements:${IMAGE_TAG} \
     --tag docker.io/openstackhelm/cinder:${IMAGE_TAG}
@@ -81,6 +91,18 @@ sudo docker exec docker-in-docker docker build --force-rm --pull --no-cache \
     --build-arg WHEELS=openstackhelm/requirements:${IMAGE_TAG} \
     --tag docker.io/openstackhelm/neutron:${IMAGE_TAG}
 sudo docker exec docker-in-docker docker push docker.io/openstackhelm/neutron:${IMAGE_TAG}
+
+sudo docker exec docker-in-docker docker build --force-rm --pull --no-cache \
+    https://git.openstack.org/openstack/loci.git \
+    --build-arg PROJECT=neutron \
+    --build-arg FROM=docker.io/ubuntu:18.04 \
+    --build-arg PROJECT_REF=${OPENSTACK_VERSION} \
+    --build-arg PROFILES="neutron linuxbridge openvswitch" \
+    --build-arg PIP_PACKAGES="pycrypto" \
+    --build-arg DIST_PACKAGES="ethtool lshw" \
+    --build-arg WHEELS=openstackhelm/requirements:${IMAGE_TAG} \
+    --tag docker.io/openstackhelm/neutron:${IMAGE_TAG}-sriov-1804
+sudo docker exec docker-in-docker docker push docker.io/openstackhelm/neutron:${IMAGE_TAG}-sriov-1804
 
 sudo docker exec docker-in-docker docker build --force-rm --pull --no-cache \
     https://git.openstack.org/openstack/loci.git \
