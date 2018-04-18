@@ -19,7 +19,8 @@ images:
     opencontrail_compute_init: docker.io/opencontrailnightly/contrail-openstack-compute-init:ocata-master-46
 
 network:
-  backend: opencontrail
+  backend:
+    - opencontrail
 
 dependencies:
   dynamic:

@@ -21,7 +21,7 @@ labels:
 
 images:
   tags:
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
     gnocchi_storage_init: docker.io/ceph/daemon:tag-build-master-luminous-ubuntu-16.04
     db_init_indexer: docker.io/postgres:9.5
     # using non-kolla images until kolla supports postgres as
@@ -40,8 +40,10 @@ network:
   api:
     ingress:
       public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
       annotations:
-        kubernetes.io/ingress.class: "nginx"
         nginx.ingress.kubernetes.io/rewrite-target: /
     external_policy_local: false
     node_port:
@@ -261,6 +263,28 @@ pod:
           cpu: "2000m"
 
 conf:
+  apache: |
+    Listen 0.0.0.0:{{ tuple "metric" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+
+    SetEnvIf X-Forwarded-For "^.*\..*\..*\..*" forwarded
+    CustomLog /dev/stdout combined env=!forwarded
+    CustomLog /dev/stdout proxy env=forwarded
+
+    <VirtualHost *:{{ tuple "metric" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}>
+        WSGIDaemonProcess gnocchi processes=1 threads=2 user=gnocchi group=gnocchi display-name=%{GROUP}
+        WSGIProcessGroup gnocchi
+        WSGIScriptAlias / "/var/lib/kolla/venv/lib/python2.7/site-packages/gnocchi/rest/app.wsgi"
+        WSGIApplicationGroup %{GLOBAL}
+
+        ErrorLog /dev/stderr
+        SetEnvIf X-Forwarded-For "^.*\..*\..*\..*" forwarded
+        CustomLog /dev/stdout combined env=!forwarded
+        CustomLog /dev/stdout proxy env=forwarded
+
+        <Directory "/var/lib/kolla/venv/lib/python2.7/site-packages/gnocchi/rest">
+              Require all granted
+        </Directory>
+    </VirtualHost>
   ceph:
     monitors: []
     admin_keyring: null
@@ -375,7 +399,7 @@ bootstrap:
   script: |
     openstack token issue
 
-# typically overriden by environmental
+# typically overridden by environmental
 # values, but should include all endpoints
 # required by this chart
 endpoints:
@@ -503,6 +527,7 @@ manifests:
   ingress_api: true
   job_bootstrap: true
   job_clean: true
+  job_db_drop: false
   job_db_init_indexer: true
   job_db_init: true
   secret_db_indexer: true

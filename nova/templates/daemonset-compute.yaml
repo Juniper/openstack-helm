@@ -126,7 +126,7 @@ spec:
             - name: pod-shared
               mountPath: /tmp/pod-shared
         {{ end }}
-        {{- if eq .Values.network.backend "opencontrail" }}
+        {{- if ( has "opencontrail" .Values.network.backend ) }}
         - name: opencontrail-compute-init
           image: {{ .Values.images.tags.opencontrail_compute_init }}
           imagePullPolicy: {{ .Values.images.pull_policy }}
@@ -234,7 +234,7 @@ spec:
             - name: machine-id
               mountPath: /etc/machine-id
               readOnly: true
-            {{- if eq .Values.network.backend "opencontrail" }}
+            {{- if ( has "opencontrail" .Values.network.backend ) }}
             - name: opencontrail-plugin-shared
               mountPath: /opt/plugin
               readOnly: true
@@ -342,7 +342,7 @@ spec:
         - name: machine-id
           hostPath:
             path: /etc/machine-id
-        {{- if eq .Values.network.backend "opencontrail" }}
+        {{- if ( has "opencontrail" .Values.network.backend ) }}
         - name: opencontrail-plugin-shared
           emptyDir: {}
         # TO-DO: Fix vif-plug-vrouter driver to detect executable dirs path
@@ -359,9 +359,11 @@ spec:
 {{- $daemonset := "compute" }}
 {{- $configMapName := "nova-etc" }}
 {{- $serviceAccountName := "nova-compute" }}
+
 {{- $dependencyOpts := dict "envAll" $envAll "dependencyMixinParam" $envAll.Values.network.backend "dependencyKey" "compute" -}}
 {{- $dependencies := include "helm-toolkit.utils.dependency_resolver" $dependencyOpts | toString | fromYaml }}
-{{ tuple . $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 {{- $daemonset_yaml := list $daemonset $configMapName $serviceAccountName $dependencies . | include "nova.compute.daemonset" | toString | fromYaml }}
 {{- $configmap_yaml := "nova.configmap.etc" }}
 {{- list $daemonset $daemonset_yaml $configmap_yaml $configMapName . | include "helm-toolkit.utils.daemonset_overrides" }}

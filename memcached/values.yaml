@@ -20,7 +20,7 @@
 conf:
   memcached:
     max_connections: 8192
-    #NOTE(pordirect): this should match the value in
+    # NOTE(pordirect): this should match the value in
     # `pod.resources.memcached.memory`
     memory: 1024
 
@@ -44,7 +44,7 @@ endpoints:
 images:
   pull_policy: IfNotPresent
   tags:
-    dep_check: 'quay.io/stackanetes/kubernetes-entrypoint:v0.2.1'
+    dep_check: 'quay.io/stackanetes/kubernetes-entrypoint:v0.3.0'
     memcached: 'docker.io/memcached:1.5.5'
 
 labels:

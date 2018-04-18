@@ -42,13 +42,14 @@ images:
     keystone_credential_rotate: docker.io/openstackhelm/keystone:newton
     keystone_api: docker.io/openstackhelm/keystone:newton
     keystone_domain_manage: docker.io/openstackhelm/keystone:newton
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
   pull_policy: "IfNotPresent"
 
 bootstrap:
   enabled: true
   ks_user: admin
   script: |
+    openstack role create --or-show _member_
     openstack role add \
           --user="${OS_USERNAME}" \
           --user-domain="${OS_USER_DOMAIN_NAME}" \
@@ -56,12 +57,23 @@ bootstrap:
           --project="${OS_PROJECT_NAME}" \
           "_member_"
 
+    #NOTE(portdirect): required for all users who operate heat stacks
+    openstack role create --or-show heat_stack_owner
+    openstack role add \
+          --user="${OS_USERNAME}" \
+          --user-domain="${OS_USER_DOMAIN_NAME}" \
+          --project-domain="${OS_PROJECT_DOMAIN_NAME}" \
+          --project="${OS_PROJECT_NAME}" \
+          "heat_stack_owner"
+
 network:
   api:
     ingress:
       public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
       annotations:
-        kubernetes.io/ingress.class: "nginx"
         nginx.ingress.kubernetes.io/rewrite-target: /
     external_policy_local: false
     node_port:
@@ -112,8 +124,8 @@ dependencies:
           service: oslo_db
     rabbit_init:
       services:
-      - service: oslo_messaging
-        endpoint: internal
+        - service: oslo_messaging
+          endpoint: internal
     domain_manage:
       services:
         - endpoint: internal
@@ -547,185 +559,185 @@ conf:
     run_tempest: false
     tests:
       KeystoneBasic.add_and_remove_user_role:
-      - runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.authenticate_user_and_validate_token:
-      - args: {}
-        runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - args: {}
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_add_and_list_user_roles:
-      - runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_and_delete_ec2credential:
-      - runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_and_delete_role:
-      - runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_and_delete_service:
-      - args:
-          description: test_description
-          service_type: Rally_test_type
-        runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - args:
+            description: test_description
+            service_type: Rally_test_type
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_and_get_role:
-      - args: {}
-        runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - args: {}
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_and_list_ec2credentials:
-      - runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_and_list_services:
-      - args:
-          description: test_description
-          service_type: Rally_test_type
-        runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - args:
+            description: test_description
+            service_type: Rally_test_type
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_and_list_tenants:
-      - args: {}
-        runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - args: {}
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_and_list_users:
-      - args: {}
-        runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - args: {}
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_delete_user:
-      - args: {}
-        runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - args: {}
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_tenant:
-      - args: {}
-        runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - args: {}
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_tenant_with_users:
-      - args:
-          users_per_tenant: 1
-        runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - args:
+            users_per_tenant: 1
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_update_and_delete_tenant:
-      - args: {}
-        runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - args: {}
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_user:
-      - args: {}
-        runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - args: {}
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_user_set_enabled_and_delete:
-      - args:
-          enabled: true
-        runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
-      - args:
-          enabled: false
-        runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - args:
+            enabled: true
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
+        - args:
+            enabled: false
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.create_user_update_password:
-      - args: {}
-        runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - args: {}
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
       KeystoneBasic.get_entities:
-      - runner:
-          concurrency: 1
-          times: 1
-          type: constant
-        sla:
-          failure_rate:
-            max: 0
+        - runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
   mpm_event:
     override:
     append:
@@ -747,8 +759,10 @@ secrets:
   oslo_messaging:
     admin: keystone-rabbitmq-admin
     keystone: keystone-rabbitmq-user
+  ldap:
+    tls: keystone-ldap-tls
 
-# typically overriden by environmental
+# typically overridden by environmental
 # values, but should include all endpoints
 # required by this chart
 endpoints:
@@ -833,6 +847,19 @@ endpoints:
     port:
       memcache:
         default: 11211
+  ldap:
+    auth:
+      client:
+        tls:
+          # NOTE(lamt): Specify a CA value here will place a LDAPS certificate at
+          # /etc/certs/tls.ca.  To ensure keystone uses LDAPS, the
+          # following key will need to be overrided under section [ldap] or the
+          # correct domain-specific setting, else it will not be enabled:
+          #
+          #   use_tls: true
+          #   tls_req_cert: allow # Valid values: demand, never, allow
+          #   tls_cacertfile: /etc/certs/tls.ca # abs path to the CA cert
+          ca: null
 
 manifests:
   configmap_bin: true

@@ -67,7 +67,7 @@ images:
     bootstrap: docker.io/openstackhelm/heat:newton
     db_drop: docker.io/openstackhelm/heat:newton
     db_init: docker.io/openstackhelm/heat:newton
-    dep_check: 'quay.io/stackanetes/kubernetes-entrypoint:v0.2.1'
+    dep_check: 'quay.io/stackanetes/kubernetes-entrypoint:v0.3.0'
     rabbit_init: docker.io/rabbitmq:3.7-management
     ks_user: docker.io/openstackhelm/heat:newton
     ks_service: docker.io/openstackhelm/heat:newton
@@ -98,57 +98,62 @@ bootstrap:
       enabled: true
       options:
         m1_tiny:
-            name: "m1.tiny"
-            id: "auto"
-            ram: 512
-            disk: 1
-            vcpus: 1
+          name: "m1.tiny"
+          id: "auto"
+          ram: 512
+          disk: 1
+          vcpus: 1
         m1_small:
-            name: "m1.small"
-            id: "auto"
-            ram: 2048
-            disk: 20
-            vcpus: 1
+          name: "m1.small"
+          id: "auto"
+          ram: 2048
+          disk: 20
+          vcpus: 1
         m1_medium:
-            name: "m1.medium"
-            id: "auto"
-            ram: 4096
-            disk: 40
-            vcpus: 2
+          name: "m1.medium"
+          id: "auto"
+          ram: 4096
+          disk: 40
+          vcpus: 2
         m1_large:
-            name: "m1.large"
-            id: "auto"
-            ram: 8192
-            disk: 80
-            vcpus: 4
+          name: "m1.large"
+          id: "auto"
+          ram: 8192
+          disk: 80
+          vcpus: 4
         m1_xlarge:
-            name: "m1.xlarge"
-            id: "auto"
-            ram: 16384
-            disk: 160
-            vcpus: 8
+          name: "m1.xlarge"
+          id: "auto"
+          ram: 16384
+          disk: 160
+          vcpus: 8
 
 network:
-  backend: ovs
+  # provide what type of network wiring will be used
+  # possible options: openvswitch, linuxbridge, sriov
+  backend:
+    - openvswitch
   osapi:
     port: 8774
     ingress:
       public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
       annotations:
-        kubernetes.io/ingress.class: "nginx"
         nginx.ingress.kubernetes.io/rewrite-target: /
     external_policy_local: false
     node_port:
       enabled: false
       port: 30774
   metadata:
-    # IF blank, set clusterIP and metadata_host dynamically
-    ip:
     port: 8775
     ingress:
       public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
       annotations:
-        kubernetes.io/ingress.class: "nginx"
         nginx.ingress.kubernetes.io/rewrite-target: /
     external_policy_local: false
     node_port:
@@ -158,13 +163,22 @@ network:
     port: 8778
     ingress:
       public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
       annotations:
-        kubernetes.io/ingress.class: "nginx"
         nginx.ingress.kubernetes.io/rewrite-target: /
     node_port:
       enabled: false
       port: 30778
   novncproxy:
+    ingress:
+      public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
+      annotations:
+        nginx.ingress.kubernetes.io/rewrite-target: /
     node_port:
       enabled: false
       port: 30680
@@ -186,14 +200,24 @@ ceph:
 dependencies:
   dynamic:
     targeted:
-      ovs:
+      openvswitch:
         compute:
-          daemonset:
-            - neutron-ovs-agent
+          pod:
+            - labels:
+                application: neutron
+                component: neutron-ovs-agent
       linuxbridge:
         compute:
-          daemonset:
-            - neutron-lb-agent
+          pod:
+            - labels:
+                application: neutron
+                component: neutron-lb-agent
+      sriov:
+        compute:
+          pod:
+            - labels:
+                application: neutron
+                component: neutron-sriov-agent
   static:
     api:
       jobs:
@@ -230,8 +254,10 @@ dependencies:
         - endpoint: internal
           service: compute
     compute:
-      daemonset:
-        - libvirt
+      pod:
+        - labels:
+          application: libvirt
+          component: libvirt
       jobs:
         - nova-db-sync
         - nova-rabbit-init
@@ -315,8 +341,8 @@ dependencies:
           service: identity
     rabbit_init:
       services:
-      - service: oslo_messaging
-        endpoint: internal
+        - service: oslo_messaging
+          endpoint: internal
     novncproxy:
       jobs:
         - nova-db-sync
@@ -969,7 +995,7 @@ conf:
       cpu_allocation_ratio: 3.0
       state_path: /var/lib/nova
       osapi_compute_listen: 0.0.0.0
-      #NOTE(portdirect): the bind port should not be defined, and is manipulated
+      # NOTE(portdirect): the bind port should not be defined, and is manipulated
       # via the endpoints section.
       osapi_compute_listen_port: null
       osapi_compute_workers: 1
@@ -1066,7 +1092,7 @@ secrets:
     admin: nova-rabbitmq-admin
     nova: nova-rabbitmq-user
 
-# typically overriden by environmental
+# typically overridden by environmental
 # values, but should include all endpoints
 # required by this chart
 endpoints:
@@ -1174,7 +1200,7 @@ endpoints:
         project_name: service
         user_domain_name: default
         project_domain_name: default
-      #NOTE(portdirect): the neutron user is not managed by the nova chart
+      # NOTE(portdirect): the neutron user is not managed by the nova chart
       # these values should match those set in the neutron chart.
       neutron:
         region_name: RegionOne
@@ -1183,7 +1209,7 @@ endpoints:
         user_domain_name: default
         username: neutron
         password: password
-      #NOTE(portdirect): the ironic user is not managed by the nova chart
+      # NOTE(portdirect): the ironic user is not managed by the nova chart
       # these values should match those set in the ironic chart.
       ironic:
         auth_type: password
@@ -1247,7 +1273,7 @@ endpoints:
     host_fqdn_override:
       default: null
     path:
-      default: "/v2/%(tenant_id)s"
+      default: "/v2.1/%(tenant_id)s"
     scheme:
       default: 'http'
     port:
@@ -1258,6 +1284,9 @@ endpoints:
         default: 6080
   compute_metadata:
     name: nova
+    ip:
+      # IF blank, set clusterIP and metadata_host dynamically
+      ingress: null
     hosts:
       default: nova-metadata
       public: metadata
@@ -1275,6 +1304,7 @@ endpoints:
     name: nova
     hosts:
       default: nova-novncproxy
+      public: novncproxy
     host_fqdn_override:
       default: null
     path:
@@ -1284,10 +1314,12 @@ endpoints:
     port:
       novnc_proxy:
         default: 6080
+        public: 80
   compute_spice_proxy:
     name: nova
     hosts:
       default: nova-spiceproxy
+      public: placement
     host_fqdn_override:
       default: null
     path:
@@ -1348,11 +1380,11 @@ pod:
     nova:
       uid: 42424
   affinity:
-      anti:
-        type:
-          default: preferredDuringSchedulingIgnoredDuringExecution
-        topologyKey:
-          default: kubernetes.io/hostname
+    anti:
+      type:
+        default: preferredDuringSchedulingIgnoredDuringExecution
+      topologyKey:
+        default: kubernetes.io/hostname
   mounts:
     nova_compute:
       init_container: null
@@ -1592,6 +1624,7 @@ manifests:
   deployment_spiceproxy: true
   deployment_scheduler: true
   ingress_metadata: true
+  ingress_novncproxy: true
   ingress_placement: true
   ingress_osapi: true
   job_bootstrap: true
@@ -1617,6 +1650,7 @@ manifests:
   secret_keystone_placement: true
   secret_rabbitmq: true
   service_ingress_metadata: true
+  service_ingress_novncproxy: true
   service_ingress_placement: true
   service_ingress_osapi: true
   service_metadata: true
