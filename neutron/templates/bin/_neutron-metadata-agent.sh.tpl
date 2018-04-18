@@ -25,6 +25,6 @@ exec neutron-metadata-agent \
 {{- else }}
       --config-file /etc/neutron/plugins/ml2/ml2_conf.ini
 {{- end }}
-{{- if eq .Values.network.backend "ovs" }} \
+{{- if ( has "openvswitch" .Values.network.backend ) }} \
       --config-file /etc/neutron/plugins/ml2/openvswitch_agent.ini
 {{- end }}

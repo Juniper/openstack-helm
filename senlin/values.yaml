@@ -42,7 +42,7 @@ images:
     ks_endpoints: docker.io/openstackhelm/heat:newton
     senlin_api: docker.io/openstackhelm/senlin:newton
     senlin_engine: docker.io/openstackhelm/senlin:newton
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
   pull_policy: "IfNotPresent"
 
 conf:
@@ -130,7 +130,7 @@ conf:
       auth_version: v3
       memcache_security_strategy: ENCRYPT
     senlin_api:
-      #NOTE(portdirect): the bind port should not be defined, and is manipulated
+      # NOTE(portdirect): the bind port should not be defined, and is manipulated
       # via the endpoints section.
       bind_port: null
 
@@ -138,8 +138,10 @@ network:
   api:
     ingress:
       public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
       annotations:
-        kubernetes.io/ingress.class: "nginx"
         nginx.ingress.kubernetes.io/rewrite-target: /
     node_port:
       enabled: false
@@ -203,8 +205,8 @@ dependencies:
           service: identity
     rabbit_init:
       services:
-      - service: oslo_messaging
-        endpoint: internal
+        - service: oslo_messaging
+          endpoint: internal
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
@@ -218,7 +220,7 @@ secrets:
     admin: senlin-rabbitmq-admin
     senlin: senlin-rabbitmq-user
 
-# typically overriden by environmental
+# typically overridden by environmental
 # values, but should include all endpoints
 # required by this chart
 endpoints:
@@ -327,11 +329,11 @@ pod:
     senlin:
       uid: 42424
   affinity:
-      anti:
-        type:
-          default: preferredDuringSchedulingIgnoredDuringExecution
-        topologyKey:
-          default: kubernetes.io/hostname
+    anti:
+      type:
+        default: preferredDuringSchedulingIgnoredDuringExecution
+      topologyKey:
+        default: kubernetes.io/hostname
   mounts:
     senlin_api:
       init_container: null

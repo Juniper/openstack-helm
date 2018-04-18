@@ -27,6 +27,9 @@ function start () {
 {{- else }}
         --config-file /etc/neutron/plugins/ml2/ml2_conf.ini
 {{- end }}
+{{- if ( has "sriov" .Values.network.backend ) }} \
+        --config-file /etc/neutron/plugins/ml2/sriov_agent.ini
+{{- end }}
 }
 
 function stop () {

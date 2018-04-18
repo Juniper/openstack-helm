@@ -115,6 +115,14 @@ spec:
               mountPath: /etc/neutron/policy.json
               subPath: policy.json
               readOnly: true
+            {{- if eq .Values.network.backend "opencontrail" }}
+            - name: neutron-plugin-shared
+              mountPath: /opt/plugin
+            - name: neutron-bin
+              mountPath: /usr/local/lib/python2.7/site-packages/contrail-plugin.pth
+              subPath: contrail-plugin.pth
+              readOnly: true
+            {{- end }}
 {{ if $mounts_neutron_server.volumeMounts }}{{ toYaml $mounts_neutron_server.volumeMounts | indent 12 }}{{ end }}
       volumes:
         - name: neutron-bin
