@@ -51,7 +51,7 @@ images:
     heat_cloudwatch: docker.io/openstackhelm/heat:newton
     heat_engine: docker.io/openstackhelm/heat:newton
     heat_engine_cleaner: docker.io/openstackhelm/heat:newton
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
     opencontrail_heat_init:
   pull_policy: "IfNotPresent"
 
@@ -211,7 +211,7 @@ conf:
     resource_types:OS::Cinder::QoSSpecs: rule:project_admin
   heat:
     DEFAULT:
-      num_engine_workers: 4
+      num_engine_workers: 1
       trusts_delegated_roles: ""
       host: heat-engine
     keystone_authtoken:
@@ -227,17 +227,17 @@ conf:
       #NOTE(portdirect): the bind port should not be defined, and is manipulated
       # via the endpoints section.
       bind_port: null
-      workers: 4
+      workers: 1
     heat_api_cloudwatch:
       #NOTE(portdirect): the bind port should not be defined, and is manipulated
       # via the endpoints section.
       bind_port: null
-      workers: 4
+      workers: 1
     heat_api_cfn:
       #NOTE(portdirect): the bind port should not be defined, and is manipulated
       # via the endpoints section.
       bind_port: null
-      workers: 4
+      workers: 1
     paste_deploy:
       api_paste_config: /etc/heat/api-paste.ini
     clients:
@@ -251,8 +251,10 @@ network:
   api:
     ingress:
       public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
       annotations:
-        kubernetes.io/ingress.class: "nginx"
         nginx.ingress.kubernetes.io/rewrite-target: /
     external_policy_local: false
     node_port:
@@ -261,8 +263,10 @@ network:
   cfn:
     ingress:
       public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
       annotations:
-        kubernetes.io/ingress.class: "nginx"
         nginx.ingress.kubernetes.io/rewrite-target: /
     node_port:
       enabled: false
@@ -270,18 +274,27 @@ network:
   cloudwatch:
     ingress:
       public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
       annotations:
-        kubernetes.io/ingress.class: "nginx"
         nginx.ingress.kubernetes.io/rewrite-target: /
     node_port:
       enabled: false
       port: 30003
 
 bootstrap:
-  enabled: false
-  ks_user: heat
+  enabled: true
+  ks_user: admin
   script: |
-    openstack token issue
+    #NOTE(portdirect): required for all users who operate heat stacks
+    openstack role create --or-show heat_stack_owner
+
+    #NOTE(portdirect): The Orchestration service automatically assigns the
+    # 'heat_stack_user' role to users that it creates during stack deployment.
+    # By default, this role restricts API operations. To avoid conflicts, do
+    # not add this role to users with the heat_stack_owner role.
+    openstack role create --or-show heat_stack_user
 
 dependencies:
   static:
@@ -375,8 +388,8 @@ dependencies:
           service: identity
     rabbit_init:
       services:
-      - service: oslo_messaging
-        endpoint: internal
+        - service: oslo_messaging
+          endpoint: internal
     trusts:
       jobs:
         - heat-ks-user
@@ -400,7 +413,7 @@ secrets:
     admin: heat-rabbitmq-admin
     heat: heat-rabbitmq-user
 
-# typically overriden by environmental
+# typically overridden by environmental
 # values, but should include all endpoints
 # required by this chart
 endpoints:
@@ -416,7 +429,9 @@ endpoints:
         user_domain_name: default
         project_domain_name: default
       heat:
-        role: admin
+        role:
+          - admin
+          - heat_stack_owner
         region_name: RegionOne
         username: heat
         password: password
@@ -555,11 +570,11 @@ pod:
     heat:
       uid: 42424
   affinity:
-      anti:
-        type:
-          default: preferredDuringSchedulingIgnoredDuringExecution
-        topologyKey:
-          default: kubernetes.io/hostname
+    anti:
+      type:
+        default: preferredDuringSchedulingIgnoredDuringExecution
+      topologyKey:
+        default: kubernetes.io/hostname
   mounts:
     heat_api:
       init_container: null
