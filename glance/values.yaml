@@ -51,7 +51,7 @@ images:
     glance_registry: docker.io/openstackhelm/glance:newton
     # Bootstrap image requires curl
     bootstrap: docker.io/openstackhelm/heat:newton
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
   pull_policy: "IfNotPresent"
 
 bootstrap:
@@ -158,8 +158,8 @@ conf:
       paste.filter_factory: glance.api.middleware.gzip:GzipMiddleware.factory
     filter:osprofiler:
       paste.filter_factory: osprofiler.web:WsgiMiddleware.factory
-      hmac_keys: SECRET_KEY  #DEPRECATED
-      enabled: yes  #DEPRECATED
+      hmac_keys: SECRET_KEY  # DEPRECATED
+      enabled: yes  # DEPRECATED
     filter:cors:
       paste.filter_factory: oslo_middleware.cors:filter_factory
       oslo_config_project: glance
@@ -215,9 +215,10 @@ conf:
     add_metadef_tags: ''
   glance:
     DEFAULT:
-      #NOTE(portdirect): the bind port should not be defined, and is manipulated
+      # NOTE(portdirect): the bind port should not be defined, and is manipulated
       # via the endpoints section.
       bind_port: null
+      workers: 1
     keystone_authtoken:
       auth_type: password
       auth_version: v3
@@ -259,13 +260,14 @@ conf:
       paste.filter_factory: keystonemiddleware.auth_token:filter_factory
     filter:osprofiler:
       paste.filter_factory: osprofiler.web:WsgiMiddleware.factory
-      hmac_keys: SECRET_KEY  #DEPRECATED
-      enabled: yes  #DEPRECATED
+      hmac_keys: SECRET_KEY  # DEPRECATED
+      enabled: yes  # DEPRECATED
   glance_registry:
     DEFAULT:
-      #NOTE(portdirect): the bind port should not be defined, and is manipulated
+      # NOTE(portdirect): the bind port should not be defined, and is manipulated
       # via the endpoints section.
       bind_port: null
+      workers: 1
     keystone_authtoken:
       auth_type: password
       auth_version: v3
@@ -276,16 +278,30 @@ conf:
       max_retries: -1
     oslo_messaging_notifications:
       driver: messagingv2
-  swift_store:
-    override:
-    append:
+  swift_store: |
+    [{{ .Values.conf.glance.glance_store.default_swift_reference }}]
+    {{- if eq .Values.storage "radosgw" }}
+    auth_version = 1
+    auth_address = {{ tuple "ceph_object_store" "public" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" }}
+    user = {{ .Values.endpoints.ceph_object_store.auth.glance.username }}:swift
+    key = {{ .Values.endpoints.ceph_object_store.auth.glance.password }}
+    {{- else }}
+    user = {{ .Values.endpoints.identity.auth.glance.project_name }}:{{ .Values.endpoints.identity.auth.glance.username }}
+    key = {{ .Values.endpoints.identity.auth.glance.password }}
+    auth_address = {{ tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" }}
+    user_domain_name = {{ .Values.endpoints.identity.auth.glance.user_domain_name }}
+    project_domain_name = {{ .Values.endpoints.identity.auth.glance.project_domain_name }}
+    auth_version = 3
+    {{- end -}}
 
 network:
   api:
     ingress:
       public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
       annotations:
-        kubernetes.io/ingress.class: "nginx"
         nginx.ingress.kubernetes.io/rewrite-target: /
         nginx.ingress.kubernetes.io/proxy-body-size: "1024M"
     external_policy_local: false
@@ -295,8 +311,10 @@ network:
   registry:
     ingress:
       public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
       annotations:
-        kubernetes.io/ingress.class: "nginx"
         nginx.ingress.kubernetes.io/rewrite-target: /
     external_policy_local: false
     node_port:
@@ -320,6 +338,8 @@ dependencies:
           service: oslo_db
         - endpoint: internal
           service: identity
+        - endpoint: internal
+          service: oslo_messaging
     bootstrap:
       jobs:
         - glance-storage-init
@@ -363,8 +383,8 @@ dependencies:
           service: identity
     rabbit_init:
       services:
-      - service: oslo_messaging
-        endpoint: internal
+        - service: oslo_messaging
+          endpoint: internal
     registry:
       jobs:
         - glance-storage-init
@@ -404,7 +424,7 @@ secrets:
     glance: glance-rabbitmq-user
 
 
-# typically overriden by environmental
+# typically overridden by environmental
 # values, but should include all endpoints
 # required by this chart
 endpoints:
@@ -555,11 +575,11 @@ pod:
     glance:
       uid: 42424
   affinity:
-      anti:
-        type:
-          default: preferredDuringSchedulingIgnoredDuringExecution
-        topologyKey:
-          default: kubernetes.io/hostname
+    anti:
+      type:
+        default: preferredDuringSchedulingIgnoredDuringExecution
+      topologyKey:
+        default: kubernetes.io/hostname
   mounts:
     glance_api:
       init_container: null

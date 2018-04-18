@@ -27,7 +27,8 @@ else
   values=""
 fi
 : ${OSH_EXTRA_HELM_ARGS:=""}
-GLANCE_BACKEND="radosgw" # NOTE(portdirect), this could be: radosgw, rbd, swift or pvc
+#NOTE(portdirect), this could be: radosgw, rbd, swift or pvc
+: ${GLANCE_BACKEND:="radosgw"}
 helm upgrade --install glance ./glance \
   --namespace=openstack $values\
   --set storage=${GLANCE_BACKEND} \
