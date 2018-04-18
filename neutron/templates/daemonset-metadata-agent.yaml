@@ -14,17 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-{{- if .Values.manifests.daemonset_metadata_agent }}
-{{- $envAll := . }}
-
-{{- $dependencyOpts := dict "envAll" $envAll "dependencyMixinParam" $envAll.Values.network.backend "dependencyKey" "metadata" -}}
-{{- $dependencies := include "helm-toolkit.utils.dependency_resolver" $dependencyOpts | toString | fromYaml }}
+{{- define "neutron.metadata_agent.daemonset" }}
+{{- $daemonset := index . 0 }}
+{{- $configMapName := index . 1 }}
+{{- $serviceAccountName := index . 2 }}
+{{- $dependencies := index . 3 }}
+{{- $envAll := index . 4 }}
+{{- with $envAll }}
 
 {{- $mounts_neutron_metadata_agent := .Values.pod.mounts.neutron_metadata_agent.neutron_metadata_agent }}
 {{- $mounts_neutron_metadata_agent_init := .Values.pod.mounts.neutron_metadata_agent.init_container }}
 
-{{- $serviceAccountName := "neutron-metadata-agent" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: extensions/v1beta1
 kind: DaemonSet
@@ -88,18 +88,11 @@ spec:
               mountPath: /etc/neutron/neutron.conf
               subPath: neutron.conf
               readOnly: true
-            {{- if eq .Values.network.backend "opencontrail" }}
-            - name: neutron-etc
-              mountPath: /etc/neutron/plugins/opencontrail/ContrailPlugin.ini
-              subPath: ContrailPlugin.ini
-              readOnly: true
-            {{- else }}
             - name: neutron-etc
               mountPath: /etc/neutron/plugins/ml2/ml2_conf.ini
               subPath: ml2_conf.ini
               readOnly: true
-            {{- end }}
-            {{- if eq .Values.network.backend "ovs" }}
+            {{- if ( has "openvswitch" .Values.network.backend ) }}
             - name: neutron-etc
               mountPath: /etc/neutron/plugins/ml2/openvswitch_agent.ini
               subPath: openvswitch_agent.ini
@@ -122,46 +115,16 @@ spec:
               mountPath: /etc/neutron/rootwrap.conf
               subPath: rootwrap.conf
               readOnly: true
+            {{- range $key, $value := $envAll.Values.conf.rootwrap_filters }}
+            {{- if ( has "metadata_agent" $value.pods ) }}
+            {{- $filePrefix := replace "_" "-"  $key }}
+            {{- $rootwrapFile := printf "/etc/neutron/rootwrap.d/%s.filters" $filePrefix }}
             - name: neutron-etc
-              mountPath: /etc/neutron/rootwrap.d/debug.filters
-              subPath: debug.filters
+              mountPath: {{ $rootwrapFile }}
+              subPath: {{ base $rootwrapFile }}
               readOnly: true
-            - name: neutron-etc
-              mountPath: /etc/neutron/rootwrap.d/dibbler.filters
-              subPath: dibbler.filters
-              readOnly: true
-            - name: neutron-etc
-              mountPath: /etc/neutron/rootwrap.d/ipset-firewall.filters
-              subPath: ipset-firewall.filters
-              readOnly: true
-            - name: neutron-etc
-              mountPath: /etc/neutron/rootwrap.d/l3.filters
-              subPath: l3.filters
-              readOnly: true
-            - name: neutron-etc
-              mountPath: /etc/neutron/rootwrap.d/netns-cleanup.filters
-              subPath: netns-cleanup.filters
-              readOnly: true
-            - name: neutron-etc
-              mountPath: /etc/neutron/rootwrap.d/dhcp.filters
-              subPath: dhcp.filters
-              readOnly: true
-            - name: neutron-etc
-              mountPath: /etc/neutron/rootwrap.d/ebtables.filters
-              subPath: ebtables.filters
-              readOnly: true
-            - name: neutron-etc
-              mountPath: /etc/neutron/rootwrap.d/iptables-firewall.filters
-              subPath: iptables-firewall.filters
-              readOnly: true
-            - name: neutron-etc
-              mountPath: /etc/neutron/rootwrap.d/linuxbridge-plugin.filters
-              subPath: linuxbridge-plugin.filters
-              readOnly: true
-            - name: neutron-etc
-              mountPath: /etc/neutron/rootwrap.d/openvswitch-plugin.filters
-              subPath: openvswitch-plugin.filters
-              readOnly: true
+            {{- end }}
+            {{- end }}
             - name: socket
               mountPath: /var/lib/neutron/openstack-helm
 {{ if $mounts_neutron_metadata_agent.volumeMounts }}{{ toYaml $mounts_neutron_metadata_agent.volumeMounts | indent 12 }}{{ end }}
@@ -172,9 +135,9 @@ spec:
             defaultMode: 0555
         - name: neutron-etc
           configMap:
-            name: neutron-etc
+            name: {{ $configMapName }}
             defaultMode: 0444
-        {{- if eq .Values.network.backend "ovs" }}
+        {{- if ( has "openvswitch" .Values.network.backend ) }}
         - name: runopenvswitch
           hostPath:
             path: /run/openvswitch
@@ -183,4 +146,18 @@ spec:
           hostPath:
             path: /var/lib/neutron/openstack-helm
 {{ if $mounts_neutron_metadata_agent.volumes }}{{ toYaml $mounts_neutron_metadata_agent.volumes | indent 8 }}{{ end }}
+{{- end }}
+{{- end }}
+
+{{- if .Values.manifests.daemonset_metadata_agent }}
+{{- $envAll := . }}
+{{- $daemonset := "metadata-agent" }}
+{{- $configMapName := "neutron-etc" }}
+{{- $serviceAccountName := "neutron-metadata-agent" }}
+{{- $dependencyOpts := dict "envAll" $envAll "dependencyMixinParam" $envAll.Values.network.backend "dependencyKey" "metadata" -}}
+{{- $dependencies := include "helm-toolkit.utils.dependency_resolver" $dependencyOpts | toString | fromYaml }}
+{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{- $daemonset_yaml := list $daemonset $configMapName $serviceAccountName $dependencies . | include "neutron.metadata_agent.daemonset" | toString | fromYaml }}
+{{- $configmap_yaml := "neutron.configmap.etc" }}
+{{- list $daemonset $daemonset_yaml $configmap_yaml $configMapName . | include "helm-toolkit.utils.daemonset_overrides" }}
 {{- end }}

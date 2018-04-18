@@ -19,7 +19,7 @@ comments, please create an `issue
 
 .. note::
   Please see the supported application versions outlined in the
-  `source variable file <https://github.com/openstack/openstack-helm/blob/master/tools/gate/vars.sh>`_.
+  `source variable file <https://github.com/openstack/openstack-helm-infra/blob/master/tools/gate/playbooks/vars.yaml>`_.
 
 Other versions and considerations (such as other CNI SDN providers),
 config map data, and value overrides will be included in other
@@ -55,9 +55,9 @@ On the worker nodes
 
     #!/bin/bash
     set -xe
-    apt-get update
-    apt-get install --no-install-recommends -y \
-            git
+    sudo apt-get update
+    sudo apt-get install --no-install-recommends -y \
+                 git
 
 
 SSH-Key preparation
@@ -78,7 +78,7 @@ should be cloned onto each node in the cluster:
     #!/bin/bash
     set -xe
 
-    chown -R ubuntu: /opt
+    sudo chown -R ubuntu: /opt
     git clone https://git.openstack.org/openstack/openstack-helm-infra.git /opt/openstack-helm-infra
     git clone https://git.openstack.org/openstack/openstack-helm.git /opt/openstack-helm
 
@@ -141,6 +141,15 @@ On the master node create an environment file for the cluster:
         domain: cluster.local
     EOF
 
+
+.. note::
+  This installation, by default will use Google DNS servers, 8.8.8.8 or 8.8.4.4
+  and updates resolv.conf. These DNS nameserver entries can be changed by
+  updating file ``/openstack-helm-infra/tools/images/kubeadm-aio/assets/opt/playbooks/vars.yaml``
+  under section ``external_dns_nameservers``. This change must be done on each
+  node in your cluster.
+
+
 Run the playbooks
 -----------------
 
@@ -156,6 +165,9 @@ On the master node run the playbooks:
 
 Deploy OpenStack-Helm
 =====================
+
+.. note::
+  The following commands all assume that they are run from the ``openstack-helm`` directory.
 
 Setup Clients on the host and assemble the charts
 -------------------------------------------------

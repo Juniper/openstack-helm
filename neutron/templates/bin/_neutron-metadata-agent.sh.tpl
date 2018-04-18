@@ -20,11 +20,7 @@ set -x
 exec neutron-metadata-agent \
       --config-file /etc/neutron/neutron.conf \
       --config-file /etc/neutron/metadata_agent.ini \
-{{- if eq .Values.network.backend "opencontrail" }}
-      --config-file /etc/neutron/plugins/opencontrail/ContrailPlugin.ini
-{{- else }}
       --config-file /etc/neutron/plugins/ml2/ml2_conf.ini
-{{- end }}
-{{- if eq .Values.network.backend "ovs" }} \
+{{- if ( has "openvswitch" .Values.network.backend ) }} \
       --config-file /etc/neutron/plugins/ml2/openvswitch_agent.ini
 {{- end }}
