@@ -45,7 +45,7 @@ OSH_EXTRA_HELM_ARGS_LIBVIRT=$OSH_EXTRA_HELM_ARGS_LIBVIRT" $values"
 #NOTE: Deploy command
 echo "Libvirt is being deployed, with hugepages mount directory"
 helm upgrade --install libvirt ./libvirt \
-  --namespace=openstack \
+  --namespace=openstack $values \
   --values=./tools/overrides/backends/opencontrail/libvirt.yaml \
   ${OSH_EXTRA_HELM_ARGS} \
   ${OSH_EXTRA_HELM_ARGS_LIBVIRT}

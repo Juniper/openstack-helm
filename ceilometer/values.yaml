@@ -55,15 +55,17 @@ images:
     ceilometer_collector: quay.io/larryrensing/ubuntu-source-ceilometer-collector:3.0.3
     ceilometer_compute: quay.io/larryrensing/ubuntu-source-ceilometer-compute:3.0.3
     ceilometer_notification: quay.io/larryrensing/ubuntu-source-ceilometer-notification:3.0.3
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
   pull_policy: "IfNotPresent"
 
 network:
   api:
     ingress:
       public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
       annotations:
-        kubernetes.io/ingress.class: "nginx"
         nginx.ingress.kubernetes.io/rewrite-target: /
     port: 8777
     node_port:
@@ -1627,7 +1629,7 @@ bootstrap:
   script: |
     openstack token issue
 
-# typically overriden by environmental
+# typically overridden by environmental
 # values, but should include all endpoints
 # required by this chart
 endpoints:
@@ -1937,6 +1939,7 @@ manifests:
   deployment_notification: true
   ingress_api: true
   job_bootstrap: true
+  job_db_drop: false
   job_db_init: true
   job_db_init_mongodb: true
   job_db_sync: true

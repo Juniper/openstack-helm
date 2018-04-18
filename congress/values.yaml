@@ -47,15 +47,17 @@ images:
     ks_endpoints: docker.io/openstackhelm/heat:newton
     congress_ds_create: docker.io/openstackhelm/congress:newton
     congress_scripted_test: docker.io/openstackhelm/congress:newton
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.2.1
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
   pull_policy: "IfNotPresent"
 
 network:
   api:
     ingress:
       public: true
+      classes:
+        namespace: "nginx"
+        cluster: "nginx-cluster"
       annotations:
-        kubernetes.io/ingress.class: "nginx"
         nginx.ingress.kubernetes.io/rewrite-target: /
     node_port:
       enabled: false
@@ -476,6 +478,7 @@ manifests:
   deployment_policy_engine: true
   ingress_api: true
   job_bootstrap: true
+  job_db_drop: false
   job_db_init: true
   job_db_sync: true
   job_ds_create: true
