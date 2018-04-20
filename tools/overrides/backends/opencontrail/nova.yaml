@@ -14,6 +14,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+compute_patch: true
+
 images:
   tags:
     opencontrail_compute_init: docker.io/opencontrailnightly/contrail-openstack-compute-init:ocata-master-46
