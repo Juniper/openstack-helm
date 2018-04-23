@@ -98,3 +98,9 @@ openstack service list
 sleep 30 #NOTE(portdirect): Wait for ingress controller to update rules and restart Nginx
 openstack hypervisor list
 openstack network agent list
+<<<<<<< 389128dbae2650e52cc8be7209e977a1c436469e
+=======
+helm test nova --timeout 900
+# https://bugs.launchpad.net/juniperopenstack/+bug/1763585
+# helm test neutron --timeout 900
+>>>>>>> comment neutron tests due to fail in update_port
