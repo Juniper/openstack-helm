@@ -30,7 +30,6 @@ openstack stack create --wait \
   heat-public-net-deployment
 
 export OSH_EXT_NET_NAME="public"
-export OSH_VM_FLAVOR="m1.tiny"
 export OSH_VM_KEY_STACK="heat-vm-key"
 export OSH_PRIVATE_SUBNET="10.0.0.0/24"
 
@@ -48,7 +47,6 @@ chmod 600 ${HOME}/.ssh/osh_key
 openstack stack create --wait \
     --parameter public_net=${OSH_EXT_NET_NAME} \
     --parameter image="${IMAGE_NAME}" \
-    --parameter flavor=${OSH_VM_FLAVOR} \
     --parameter ssh_key=${OSH_VM_KEY_STACK} \
     --parameter cidr=${OSH_PRIVATE_SUBNET} \
     -t ./tools/gate/files/heat-basic-vm-deployment.yaml \
