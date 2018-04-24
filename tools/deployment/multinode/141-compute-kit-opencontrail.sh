@@ -15,6 +15,9 @@
 #    under the License.
 set -xe
 
+#NOTE: Pull opencontrail images from override files
+./tools/pull-opencontrail-images.sh
+
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
 if [ "$OPENSTACK_VERSION" == "ocata" ]; then
   values="--values=./tools/overrides/releases/ocata/loci.yaml "

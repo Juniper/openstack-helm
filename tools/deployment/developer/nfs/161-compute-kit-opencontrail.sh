@@ -19,6 +19,9 @@ set -xe
 make pull-images nova
 make pull-images neutron
 
+#NOTE: Pull opencontrail images from override files
+./tools/pull-opencontrail-images.sh
+
 #NOTE: Deploy nova
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
 if [ "$OPENSTACK_VERSION" == "ocata" ]; then
