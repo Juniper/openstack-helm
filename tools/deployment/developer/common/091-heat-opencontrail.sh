@@ -17,6 +17,8 @@ set -xe
 
 #NOTE: Pull images and lint chart
 make pull-images heat
+#NOTE: Pull opencontrail images from override files
+./tools/pull-opencontrail-images.sh
 
 #NOTE: Deploy command
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
