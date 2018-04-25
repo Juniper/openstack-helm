@@ -15,6 +15,13 @@
 images:
   tags:
     opencontrail_neutron_init: docker.io/opencontrailnightly/contrail-openstack-neutron-init:ocata-master-46
+  #
+  # Enable this when pulling images from secure private docker registry. Secret should match
+  # secret_name given under docker.private_registries in ${OSH_INFRA_PATH}/tools/gate/devel/local-vars.yaml
+  # or ${OSH_INFRA_PATH}/tools/gate/devel/multinode-vars.yaml
+  #
+  #imagePullSecrets:
+  #  - contrail-image-secret
 
 network:
   backend:
