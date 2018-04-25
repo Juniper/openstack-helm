@@ -53,6 +53,13 @@ spec:
       nodeSelector:
         {{ .Values.labels.engine.node_selector_key }}: {{ .Values.labels.engine.node_selector_value }}
       terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.engine.timeout | default "30" }}
+      # Note: [To-do] Move below logic to helm-toolkit chart
+      {{- if .Values.images.imagePullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.images.imagePullSecrets }}
+        - name: {{ . | quote }}
+      {{- end }}
+      {{- end }}
       initContainers:
 {{ tuple $envAll $dependencies $mounts_heat_engine_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
         {{- if .Values.conf.heat.clients_contrail }}

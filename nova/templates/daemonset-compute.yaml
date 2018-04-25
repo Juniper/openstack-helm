@@ -45,6 +45,13 @@ spec:
       hostNetwork: true
       hostPID: true
       dnsPolicy: ClusterFirstWithHostNet
+      # Note: [To-do] Move below logic to helm-toolkit chart
+      {{- if .Values.images.imagePullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.images.imagePullSecrets }}
+        - name: {{ . | quote }}
+      {{- end }}
+      {{- end }}
       initContainers:
 {{ tuple $envAll $dependencies $mounts_nova_compute_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
         - name: nova-compute-init
