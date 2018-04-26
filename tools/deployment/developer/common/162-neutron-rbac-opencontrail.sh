@@ -25,10 +25,12 @@ else
   values=""
 fi
 
+OSH_EXTRA_HELM_ARGS_NEUTRON="$values "$OSH_EXTRA_HELM_ARGS_NEUTRON
+
 : ${OSH_EXTRA_HELM_ARGS:-""}
 #NOTE: Upgrade neutron
 helm upgrade --install neutron ./neutron \
-    --namespace=openstack $values \
+    --namespace=openstack \
     --values=./tools/overrides/backends/opencontrail/neutron.yaml \
     --values=./tools/overrides/backends/opencontrail/neutron-rbac.yaml \
     ${OSH_EXTRA_HELM_ARGS} \

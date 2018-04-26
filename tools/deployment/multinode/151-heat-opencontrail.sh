@@ -25,6 +25,8 @@ else
   values=""
 fi
 
+OSH_EXTRA_HELM_ARGS_HEAT="$values "$OSH_EXTRA_HELM_ARGS_HEAT
+
 #NOTE: Deploy command
 tee /tmp/heat.yaml << EOF
 pod:
@@ -35,7 +37,7 @@ pod:
     engine: 2
 EOF
 helm upgrade --install heat ./heat \
-  --namespace=openstack $values \
+  --namespace=openstack \
   --values=/tmp/heat.yaml \
   --values=./tools/overrides/backends/opencontrail/heat.yaml \
   ${OSH_EXTRA_HELM_ARGS} \
