@@ -27,8 +27,11 @@ if [ "$OPENSTACK_VERSION" == "ocata" ]; then
 else
   values=""
 fi
+
+OSH_EXTRA_HELM_ARGS_HEAT="$values "$OSH_EXTRA_HELM_ARGS_HEAT
+
 helm upgrade --install heat ./heat \
-  --namespace=openstack $values \
+  --namespace=openstack \
   --values=./tools/overrides/backends/opencontrail/heat.yaml \
   ${OSH_EXTRA_HELM_ARGS} \
   ${OSH_EXTRA_HELM_ARGS_HEAT}

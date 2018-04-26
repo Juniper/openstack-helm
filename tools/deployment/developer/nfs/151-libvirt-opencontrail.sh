@@ -24,7 +24,7 @@ if [ "$OPENSTACK_VERSION" == "ocata" ]; then
   values+="--values=./tools/overrides/backends/opencontrail/libvirt-ocata.yaml "
 fi
 
-HUGE_PAGES_DIR=${HUGE_PAGES_DIR:-""}
+HUGE_PAGES_DIR=${HUGE_PAGES_DIR:-"/dev/hugepages"}
 if [[ ! -z "$HUGE_PAGES_DIR" ]]; then
 tee /tmp/libvirt_mount.yaml << EOF
 pod:
@@ -42,12 +42,12 @@ EOF
 values+="--values=/tmp/libvirt_mount.yaml "
 fi
 
-# Append $values to OSH_EXTRA_HELM_ARGS_LIBVIRT
-OSH_EXTRA_HELM_ARGS_LIBVIRT=$OSH_EXTRA_HELM_ARGS_LIBVIRT" $values"
+# Insert $values to OSH_EXTRA_HELM_ARGS_LIBVIRT
+OSH_EXTRA_HELM_ARGS_LIBVIRT="$values "$OSH_EXTRA_HELM_ARGS_LIBVIRT
 
 #NOTE: Deploy command
 helm upgrade --install libvirt ./libvirt \
-  --namespace=openstack $values \
+  --namespace=openstack \
   --values=./tools/overrides/backends/opencontrail/libvirt.yaml \
   --set ceph.enabled=false \
   ${OSH_EXTRA_HELM_ARGS} \
