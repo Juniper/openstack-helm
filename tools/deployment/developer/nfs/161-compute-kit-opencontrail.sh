@@ -26,16 +26,21 @@ make pull-images neutron
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
 if [ "$OPENSTACK_VERSION" == "ocata" ]; then
   values="--values=./tools/overrides/releases/ocata/loci.yaml "
-  values+="--values=./tools/overrides/backends/opencontrail/nova-ocata.yaml "
-fi
 
-# Append $values to OSH_EXTRA_HELM_ARGS_NOVA
-OSH_EXTRA_HELM_ARGS_NOVA=$OSH_EXTRA_HELM_ARGS_NOVA" $values"
+  # Insert $values to OSH_EXTRA_HELM_ARGS_NEUTRON
+  OSH_EXTRA_HELM_ARGS_NEUTRON="$values "$OSH_EXTRA_HELM_ARGS_NEUTRON
+
+  # Add nova ocata override files
+  values+="--values=./tools/overrides/backends/opencontrail/nova-ocata.yaml "
+
+  # Insert $values to OSH_EXTRA_HELM_ARGS_NOVA
+  OSH_EXTRA_HELM_ARGS_NOVA="$values "$OSH_EXTRA_HELM_ARGS_NOVA
+fi
 
 if [ "x$(systemd-detect-virt)" == "xnone" ]; then
   echo 'OSH is not being deployed in virtualized environment'
   helm upgrade --install nova ./nova \
-      --namespace=openstack $values \
+      --namespace=openstack \
       --values=./tools/overrides/backends/opencontrail/nova.yaml \
       --set ceph.enabled=false \
       ${OSH_EXTRA_HELM_ARGS} \
@@ -43,7 +48,7 @@ if [ "x$(systemd-detect-virt)" == "xnone" ]; then
 else
   echo 'OSH is being deployed in virtualized environment, using qemu for nova'
   helm upgrade --install nova ./nova \
-      --namespace=openstack $values \
+      --namespace=openstack \
       --values=./tools/overrides/backends/opencontrail/nova.yaml \
       --set ceph.enabled=false \
       --set conf.nova.libvirt.virt_type=qemu \
@@ -53,7 +58,7 @@ fi
 
 #NOTE: Deploy neutron
 helm upgrade --install neutron ./neutron \
-    --namespace=openstack $values \
+    --namespace=openstack \
     --values=./tools/overrides/backends/opencontrail/neutron.yaml \
     ${OSH_EXTRA_HELM_ARGS} \
     ${OSH_EXTRA_HELM_ARGS_NEUTRON}
