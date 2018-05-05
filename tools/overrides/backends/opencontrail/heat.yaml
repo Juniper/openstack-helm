@@ -14,7 +14,7 @@
 
 images:
   tags:
-    opencontrail_heat_init: docker.io/opencontrailnightly/contrail-openstack-heat-init:ocata-master-46
+    opencontrail_heat_init: docker.io/opencontrailnightly/contrail-openstack-heat-init:latest
   #
   # Enable this when pulling images from secure private docker registry. Secret should match
   # secret_name given under docker.private_registries in ${OSH_INFRA_PATH}/tools/gate/devel/local-vars.yaml
