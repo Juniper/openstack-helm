@@ -18,7 +18,7 @@ compute_patch: true
 
 images:
   tags:
-    opencontrail_compute_init: docker.io/opencontrailnightly/contrail-openstack-compute-init:ocata-master-46
+    opencontrail_compute_init: docker.io/opencontrailnightly/contrail-openstack-compute-init:latest
   #
   # Enable this when pulling images from secure private docker registry. Secret should match
   # secret_name given under docker.private_registries in ${OSH_INFRA_PATH}/tools/gate/devel/local-vars.yaml
