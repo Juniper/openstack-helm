@@ -41,10 +41,7 @@ conf:
 EOF
 helm upgrade --install cinder ./cinder \
   --namespace=openstack $values \
-<<<<<<< HEAD
-=======
   --values=/tmp/cinder.yaml \
->>>>>>> f1e1338... Opencontrail support for ocata charts
   ${OSH_EXTRA_HELM_ARGS} \
   ${OSH_EXTRA_HELM_ARGS_CINDER}
 
