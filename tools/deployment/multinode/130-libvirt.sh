@@ -15,14 +15,15 @@
 #    under the License.
 set -xe
 
-#NOTE: Deploy command
-helm upgrade --install libvirt ./libvirt \
+#NOTE: Deploy libvirt
+: ${OSH_INFRA_PATH:="../openstack-helm-infra"}
+helm upgrade --install libvirt ${OSH_INFRA_PATH}/libvirt \
   --namespace=openstack \
   ${OSH_EXTRA_HELM_ARGS} \
   ${OSH_EXTRA_HELM_ARGS_LIBVIRT}
 
-#NOTE: Wait for deploy
-./tools/deployment/common/wait-for-pods.sh openstack
+#NOTE(portdirect): We don't wait for libvirt pods to come up, as they depend
+# on the neutron agents being up.
 
 #NOTE: Validate Deployment info
 helm status libvirt

@@ -16,15 +16,16 @@ limitations under the License.
 
 {{- if .Values.manifests.job_ds_create }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.ds_create }}
 
 {{- $serviceAccountName := "congress-ds-create" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "ds_create" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: congress-ds-create
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
 spec:
   template:
     metadata:
@@ -36,11 +37,10 @@ spec:
       nodeSelector:
         {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "ds_create" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: congress-ds-create
-          image: {{ .Values.images.tags.congress_ds_create }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "congress_ds_create" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.ds_create | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           command:
             - /tmp/ds-create.sh

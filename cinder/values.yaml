@@ -56,11 +56,17 @@ images:
     cinder_scheduler: docker.io/openstackhelm/cinder:newton
     cinder_volume: docker.io/openstackhelm/cinder:newton
     cinder_volume_usage_audit: docker.io/openstackhelm/cinder:newton
-    cinder_storage_init: docker.io/ceph/daemon:tag-build-master-luminous-ubuntu-16.04
+    cinder_storage_init: docker.io/port/ceph-config-helper:v1.10.3
     cinder_backup: docker.io/openstackhelm/cinder:newton
-    cinder_backup_storage_init: docker.io/ceph/daemon:tag-build-master-luminous-ubuntu-16.04
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
+    cinder_backup_storage_init: docker.io/port/ceph-config-helper:v1.10.3
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
+    image_repo_sync: docker.io/docker:17.07.0
   pull_policy: "IfNotPresent"
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
 
 jobs:
   volume_usage_audit:
@@ -233,6 +239,13 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
 
 bootstrap:
   enabled: true
@@ -256,6 +269,10 @@ network:
     node_port:
       enabled: false
       port: 30877
+
+ceph_client:
+  configmap: ceph-etc
+  user_secret_name: pvc-ceph-client-key
 
 conf:
   paste:
@@ -703,6 +720,7 @@ conf:
         chunk_size: 8
   cinder:
     DEFAULT:
+      log_config_append: /etc/cinder/logging.conf
       use_syslog: false
       use_stderr: true
       enable_v1_api: false
@@ -715,9 +733,9 @@ conf:
       # via the endpoints section.
       osapi_volume_listen_port: null
       enabled_backends: "rbd1"
-      # NOTE(portdirect): "cinder.backup.drivers.swift"  and
+      # NOTE(portdirect): "cinder.backup.drivers.ceph"  and
       # "cinder.backup.drivers.posix" also supported
-      backup_driver: "cinder.backup.drivers.ceph"
+      backup_driver: "cinder.backup.drivers.swift"
       # Backup: Ceph RBD options
       backup_ceph_conf: "/etc/ceph/ceph.conf"
       backup_ceph_user: cinderbackup
@@ -736,6 +754,79 @@ conf:
       driver: messagingv2
     coordination:
       backend_url: file:///var/lib/cinder/coordination
+  logging:
+    loggers:
+      keys:
+        - root
+        - cinder
+    handlers:
+      keys:
+        - stdout
+        - stderr
+        - "null"
+    formatters:
+      keys:
+        - context
+        - default
+    logger_root:
+      level: WARNING
+      handlers: 'null'
+    logger_cinder:
+      level: INFO
+      handlers:
+        - stdout
+      qualname: cinder
+    logger_amqp:
+      level: WARNING
+      handlers: stderr
+      qualname: amqp
+    logger_amqplib:
+      level: WARNING
+      handlers: stderr
+      qualname: amqplib
+    logger_eventletwsgi:
+      level: WARNING
+      handlers: stderr
+      qualname: eventlet.wsgi.server
+    logger_sqlalchemy:
+      level: WARNING
+      handlers: stderr
+      qualname: sqlalchemy
+    logger_boto:
+      level: WARNING
+      handlers: stderr
+      qualname: boto
+    handler_null:
+      class: logging.NullHandler
+      formatter: default
+      args: ()
+    handler_stdout:
+      class: StreamHandler
+      args: (sys.stdout,)
+      formatter: context
+    handler_stderr:
+      class: StreamHandler
+      args: (sys.stderr,)
+      formatter: context
+    formatter_context:
+      class: oslo_log.formatters.ContextFormatter
+    formatter_default:
+      format: "%(message)s"
+  rabbitmq:
+    #NOTE(rk760n): adding rmq policy to mirror messages from notification queues and set expiration time for the ones
+    policies:
+      - vhost: "cinder"
+        name: "ha_ttl_cinder"
+        definition:
+          #mirror messges to other nodes in rmq cluster
+          ha-mode: "all"
+          ha-sync-mode: "automatic"
+          #70s
+          message-ttl: 70000
+        priority: 0
+        apply-to: all
+        pattern: '(notifications)\.'
+
   backends:
     # Those options will be written to backends.conf as-is.
     rbd1:
@@ -748,6 +839,7 @@ conf:
       rbd_store_chunk_size: 4
       rados_connect_timeout: -1
       rbd_user: cinder
+      rbd_secret_uuid: 457eb676-33da-42ec-9a8c-9293d545c337
   rally_tests:
     run_tempest: false
     tests:
@@ -774,18 +866,34 @@ conf:
               max: 0
 
 backup:
+  external_ceph_rbd:
+    enabled: false
+    admin_keyring: null
+    conf:
+      global:
+        mon_host: null
+      osd:
   posix:
     volume:
       class_name: general
       size: 10Gi
 
 dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - cinder-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
   static:
     api:
       jobs:
         - cinder-db-sync
         - cinder-ks-user
         - cinder-ks-endpoints
+        - cinder-rabbit-init
         - cinder-storage-init
       services:
         - endpoint: internal
@@ -797,6 +905,7 @@ dependencies:
         - cinder-db-sync
         - cinder-ks-user
         - cinder-ks-endpoints
+        - cinder-rabbit-init
         - cinder-storage-init
         - cinder-backup-storage-init
       services:
@@ -851,6 +960,7 @@ dependencies:
         - cinder-db-sync
         - cinder-ks-user
         - cinder-ks-endpoints
+        - cinder-rabbit-init
         - cinder-storage-init
       services:
         - endpoint: internal
@@ -870,6 +980,7 @@ dependencies:
         - cinder-db-sync
         - cinder-ks-user
         - cinder-ks-endpoints
+        - cinder-rabbit-init
         - cinder-storage-init
       services:
         - endpoint: internal
@@ -881,12 +992,17 @@ dependencies:
         - cinder-db-sync
         - cinder-ks-user
         - cinder-ks-endpoints
+        - cinder-rabbit-init
         - cinder-storage-init
       services:
         - endpoint: internal
           service: identity
         - endpoint: internal
           service: volume
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
@@ -903,12 +1019,28 @@ secrets:
   oslo_messaging:
     admin: cinder-rabbitmq-admin
     cinder: cinder-rabbitmq-user
+  tls:
+    volume:
+      api:
+        public: cinder-tls-public
 
 # We use a different layout of the endpoints here to account for versioning
 # this swaps the service name and type, and should be rolled out to other
 # services.
 endpoints:
   cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
   identity:
     name: keystone
     auth:
@@ -925,19 +1057,19 @@ endpoints:
         username: cinder
         password: password
         project_name: service
-        user_domain_name: default
-        project_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
       test:
         role: admin
         region_name: RegionOne
         username: test
         password: password
         project_name: test
-        user_domain_name: default
-        project_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
     hosts:
-      default: keystone-api
-      public: keystone
+      default: keystone
+      internal: keystone-api
     host_fqdn_override:
       default: null
     path:
@@ -945,10 +1077,9 @@ endpoints:
     scheme:
       default: http
     port:
-      admin:
-        default: 35357
       api:
         default: 80
+        internal: 5000
   image:
     name: glance
     hosts:
@@ -986,6 +1117,13 @@ endpoints:
       public: cinder
     host_fqdn_override:
       default: null
+      # NOTE(portdirect): this chart supports TLS for fqdn over-ridden public
+      # endpoints using the following format:
+      # public:
+      #   host: null
+      #   tls:
+      #     crt: null
+      #     key: null
     path:
       default: '/v1/%(tenant_id)s'
     scheme:
@@ -995,12 +1133,19 @@ endpoints:
         default: 8776
         public: 80
   volumev2:
-    name: cinder
+    name: cinderv2
     hosts:
       default: cinder-api
       public: cinder
     host_fqdn_override:
       default: null
+      # NOTE(portdirect): this chart supports TLS for fqdn over-ridden public
+      # endpoints using the following format:
+      # public:
+      #   host: null
+      #   tls:
+      #     crt: null
+      #     key: null
     path:
       default: '/v2/%(tenant_id)s'
     scheme:
@@ -1010,12 +1155,19 @@ endpoints:
         default: 8776
         public: 80
   volumev3:
-    name: cinder
+    name: cinderv3
     hosts:
       default: cinder-api
       public: cinder
     host_fqdn_override:
       default: null
+      # NOTE(portdirect): this chart supports TLS for fqdn over-ridden public
+      # endpoints using the following format:
+      # public:
+      #   host: null
+      #   tls:
+      #     crt: null
+      #     key: null
     path:
       default: '/v3/%(tenant_id)s'
     scheme:
@@ -1053,7 +1205,7 @@ endpoints:
       default: rabbitmq
     host_fqdn_override:
       default: null
-    path: /
+    path: /cinder
     scheme: rabbit
     port:
       amqp:
@@ -1075,6 +1227,21 @@ endpoints:
     port:
       memcache:
         default: 11211
+  fluentd:
+    namespace: null
+    name: fluentd
+    hosts:
+      default: fluentd-logging
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: 'http'
+    port:
+      service:
+        default: 24224
+      metrics:
+        default: 24220
 
 manifests:
   configmap_bin: true
@@ -1089,6 +1256,7 @@ manifests:
   job_bootstrap: true
   job_clean: true
   job_db_init: true
+  job_image_repo_sync: true
   job_rabbit_init: true
   job_db_sync: true
   job_db_drop: false
@@ -1100,6 +1268,7 @@ manifests:
   pod_rally_test: true
   pvc_backup: true
   secret_db: true
+  secret_ingress_tls: true
   secret_keystone: true
   secret_rabbitmq: true
   service_api: true

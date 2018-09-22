@@ -16,12 +16,16 @@
 
 set -xe
 
-#NOTE: Pull images and lint chart
-make pull-images ceph
+#NOTE: Lint and package chart
+: ${OSH_INFRA_PATH:="../openstack-helm-infra"}
+for CHART in ceph-mon ceph-osd ceph-client ceph-provisioners; do
+  make -C ${OSH_INFRA_PATH} "${CHART}"
+done
 
 #NOTE: Deploy command
+
 : ${OSH_EXTRA_HELM_ARGS:=""}
-uuidgen > /tmp/ceph-fs-uuid.txt
+[ -s /tmp/ceph-fs-uuid.txt ] || uuidgen > /tmp/ceph-fs-uuid.txt
 CEPH_FS_ID="$(cat /tmp/ceph-fs-uuid.txt)"
 #NOTE(portdirect): to use RBD devices with Ubuntu kernels < 4.5 this
 # should be set to 'hammer'
@@ -38,11 +42,29 @@ endpoints:
     namespace: openstack
   object_store:
     namespace: ceph
+    port:
+      api:
+        default: 8088
+        public: 80
   ceph_mon:
     namespace: ceph
+    port:
+      mon:
+        default: 6789
+  ceph_mgr:
+    namespace: ceph
+    port:
+      mgr:
+        default: 7000
+      metrics:
+        default: 9283
 network:
   public: 172.17.0.1/16
   cluster: 172.17.0.1/16
+  port:
+    mon: 6789
+    rgw: 8088
+    mgr: 7000
 deployment:
   storage_secrets: true
   ceph: true
@@ -58,6 +80,7 @@ conf:
   ceph:
     global:
       fsid: ${CEPH_FS_ID}
+      mon_addr: :6789
       osd_pool_default_size: 1
     osd:
       osd_crush_chooseleaf_type: 0
@@ -153,20 +176,29 @@ conf:
         journal:
           type: directory
           location: /var/lib/openstack-helm/ceph/osd/journal-one
+
+pod:
+  replicas:
+    mds: 1
+    mgr: 1
+    rgw: 1
 EOF
-helm upgrade --install ceph ./ceph \
-  --namespace=ceph \
-  --values=/tmp/ceph.yaml \
-  ${OSH_EXTRA_HELM_ARGS} \
-  ${OSH_EXTRA_HELM_ARGS_CEPH_DEPLOY}
 
-#NOTE: Wait for deploy
-./tools/deployment/common/wait-for-pods.sh ceph
+for CHART in ceph-mon ceph-osd ceph-client ceph-provisioners; do
+  helm upgrade --install ${CHART} ${OSH_INFRA_PATH}/${CHART} \
+    --namespace=ceph \
+    --values=/tmp/ceph.yaml \
+    ${OSH_EXTRA_HELM_ARGS} \
+    ${OSH_EXTRA_HELM_ARGS_CEPH_DEPLOY}
 
-#NOTE: Validate deploy
-MON_POD=$(kubectl get pods \
-  --namespace=ceph \
-  --selector="application=ceph" \
-  --selector="component=mon" \
-  --no-headers | awk '{ print $1; exit }')
-kubectl exec -n ceph ${MON_POD} -- ceph -s
+  #NOTE: Wait for deploy
+  ./tools/deployment/common/wait-for-pods.sh ceph
+
+  #NOTE: Validate deploy
+  MON_POD=$(kubectl get pods \
+    --namespace=ceph \
+    --selector="application=ceph" \
+    --selector="component=mon" \
+    --no-headers | awk '{ print $1; exit }')
+  kubectl exec -n ceph ${MON_POD} -- ceph -s
+done

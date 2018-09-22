@@ -16,20 +16,26 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_api }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.api }}
 
 {{- $mounts_barbican_api := .Values.pod.mounts.barbican_api.barbican_api }}
 {{- $mounts_barbican_api_init := .Values.pod.mounts.barbican_api.init_container }}
 
 {{- $serviceAccountName := "barbican-api" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "api" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: barbican-api
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "barbican" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
   replicas: {{ .Values.pod.replicas.api }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "barbican" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
 {{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
   template:
     metadata:
@@ -45,11 +51,10 @@ spec:
       nodeSelector:
         {{ .Values.labels.api.node_selector_key }}: {{ .Values.labels.api.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies $mounts_barbican_api_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "api" $mounts_barbican_api_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: barbican-api
-          image: {{ .Values.images.tags.barbican_api }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "barbican_api" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.api | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           securityContext:
             runAsUser: {{ .Values.pod.user.barbican.uid }}
@@ -80,6 +85,10 @@ spec:
               subPath: barbican.conf
               readOnly: true
             - name: barbican-etc
+              mountPath: {{ .Values.conf.barbican.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.barbican.DEFAULT.log_config_append }}
+              readOnly: true
+            - name: barbican-etc
               mountPath: /etc/barbican/api_audit_map.conf
               subPath: api_audit_map.conf
               readOnly: true
@@ -100,8 +109,8 @@ spec:
         - name: etcbarbican
           emptyDir: {}
         - name: barbican-etc
-          configMap:
-            name: barbican-etc
+          secret:
+            secretName: barbican-etc
             defaultMode: 0444
         - name: barbican-bin
           configMap:

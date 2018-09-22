@@ -16,15 +16,16 @@ limitations under the License.
 
 {{- if .Values.manifests.job_ks_user_domain }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.ks_user }}
 
 {{- $serviceAccountName := "heat-ks-user-domain" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "ks_user" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: heat-domain-ks-user
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
 spec:
   template:
     metadata:
@@ -36,11 +37,10 @@ spec:
       nodeSelector:
         {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "ks_user" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: heat-ks-domain-user
-          image: {{ .Values.images.tags.ks_user }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "ks_user" | include "helm-toolkit.snippets.image" | indent 10 }}
           command:
             - /tmp/ks-domain-user.sh
           volumeMounts:

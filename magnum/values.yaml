@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Default values for keystone.
+# Default values for magnum.
 # This is a YAML-formatted file.
 # Declare name/value pairs to be passed into your templates.
 # name: value
@@ -42,8 +42,14 @@ images:
     ks_endpoints: docker.io/openstackhelm/heat:newton
     magnum_api: docker.io/openstackhelm/magnum:newton
     magnum_conductor: docker.io/openstackhelm/magnum:newton
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
+    image_repo_sync: docker.io/docker:17.07.0
   pull_policy: "IfNotPresent"
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
 
 conf:
   paste:
@@ -108,9 +114,18 @@ conf:
     magnum-service:get_all: rule:admin_api
   magnum:
     DEFAULT:
+      log_config_append: /etc/magnum/logging.conf
       transport_url: null
+    oslo_messaging_notifications:
+      driver: messaging
+    oslo_concurrency:
+      lock_path: /var/lib/magnum/tmp
+    certificates:
+      cert_manager_type: barbican
     database:
       max_retries: -1
+    trust:
+      trustee_domain_name: null
     keystone_authtoken:
       auth_type: password
       auth_version: v3
@@ -120,6 +135,64 @@ conf:
       # via the endpoints section.
       port: null
       host: 0.0.0.0
+  logging:
+    loggers:
+      keys:
+        - root
+        - magnum
+    handlers:
+      keys:
+        - stdout
+        - stderr
+        - "null"
+    formatters:
+      keys:
+        - context
+        - default
+    logger_root:
+      level: WARNING
+      handlers: 'null'
+    logger_magnum:
+      level: INFO
+      handlers:
+        - stdout
+      qualname: magnum
+    logger_amqp:
+      level: WARNING
+      handlers: stderr
+      qualname: amqp
+    logger_amqplib:
+      level: WARNING
+      handlers: stderr
+      qualname: amqplib
+    logger_eventletwsgi:
+      level: WARNING
+      handlers: stderr
+      qualname: eventlet.wsgi.server
+    logger_sqlalchemy:
+      level: WARNING
+      handlers: stderr
+      qualname: sqlalchemy
+    logger_boto:
+      level: WARNING
+      handlers: stderr
+      qualname: boto
+    handler_null:
+      class: logging.NullHandler
+      formatter: default
+      args: ()
+    handler_stdout:
+      class: StreamHandler
+      args: (sys.stdout,)
+      formatter: context
+    handler_stderr:
+      class: StreamHandler
+      args: (sys.stderr,)
+      formatter: context
+    formatter_context:
+      class: oslo_log.formatters.ContextFormatter
+    formatter_default:
+      format: "%(message)s"
 
 network:
   api:
@@ -142,27 +215,51 @@ bootstrap:
     openstack token issue
 
 dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - magnum-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
   static:
     api:
       jobs:
         - magnum-db-sync
         - magnum-ks-user
+        - magnum-domain-ks-user
         - magnum-ks-endpoints
+        - magnum-rabbit-init
       services:
         - endpoint: internal
           service: oslo_db
         - endpoint: internal
           service: identity
+        - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
+          service: key_manager
+        - endpoint: internal
+          service: orchestration
     conductor:
       jobs:
         - magnum-db-sync
         - magnum-ks-user
+        - magnum-domain-ks-user
         - magnum-ks-endpoints
+        - magnum-rabbit-init
       services:
         - endpoint: internal
           service: oslo_db
         - endpoint: internal
           service: identity
+        - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
+          service: key_manager
+        - endpoint: internal
+          service: orchestration
     db_drop:
       services:
         - endpoint: internal
@@ -193,13 +290,19 @@ dependencies:
           service: identity
     rabbit_init:
       services:
-        - service: oslo_messaging
-          endpoint: internal
+        - endpoint: internal
+          service: oslo_messaging
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
+
 # Names of secrets used by bootstrap and environmental checks
 secrets:
   identity:
     admin: magnum-keystone-admin
     magnum: magnum-keystone-user
+    magnum_stack_user: magnum-keystone-stack-user
   oslo_db:
     admin: magnum-db-admin
     magnum: magnum-db-user
@@ -212,6 +315,18 @@ secrets:
 # required by this chart
 endpoints:
   cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
   identity:
     name: keystone
     auth:
@@ -228,11 +343,17 @@ endpoints:
         username: magnum
         password: password
         project_name: service
-        user_domain_name: default
-        project_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
+      magnum_stack_user:
+        role: admin
+        region_name: RegionOne
+        username: magnum-domain
+        password: password
+        domain_name: magnum
     hosts:
-      default: keystone-api
-      public: keystone
+      default: keystone
+      internal: keystone-api
     host_fqdn_override:
       default: null
     path:
@@ -240,10 +361,9 @@ endpoints:
     scheme:
       default: http
     port:
-      admin:
-        default: 35357
       api:
         default: 80
+        internal: 5000
   container_infra:
     name: magnum
     hosts:
@@ -258,6 +378,36 @@ endpoints:
     port:
       api:
         default: 9511
+        public: 80
+  key_manager:
+    name: barbican
+    hosts:
+      default: barbican-api
+      public: barbican
+    host_fqdn_override:
+      default: null
+    path:
+      default: /v1
+    scheme:
+      default: http
+    port:
+      api:
+        default: 9311
+        public: 80
+  orchestration:
+    name: heat
+    hosts:
+      default: heat-api
+      public: heat
+    host_fqdn_override:
+      default: null
+    path:
+      default: '/v1/%(project_id)s'
+    scheme:
+      default: 'http'
+    port:
+      api:
+        default: 8004
         public: 80
   oslo_db:
     auth:
@@ -303,13 +453,28 @@ endpoints:
       default: rabbitmq
     host_fqdn_override:
       default: null
-    path: /
+    path: /magnum
     scheme: rabbit
     port:
       amqp:
         default: 5672
       http:
         default: 15672
+  fluentd:
+    namespace: null
+    name: fluentd
+    hosts:
+      default: fluentd-logging
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: 'http'
+    port:
+      service:
+        default: 24224
+      metrics:
+        default: 24220
 
 pod:
   user:
@@ -428,6 +593,13 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
 
 manifests:
   configmap_bin: true
@@ -438,8 +610,10 @@ manifests:
   job_db_init: true
   job_db_sync: true
   job_db_drop: false
+  job_image_repo_sync: true
   job_ks_endpoints: true
   job_ks_service: true
+  job_ks_user_domain: true
   job_ks_user: true
   job_rabbit_init: true
   pdb_api: true

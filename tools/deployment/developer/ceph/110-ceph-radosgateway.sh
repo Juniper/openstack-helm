@@ -16,10 +16,11 @@
 
 set -xe
 
-#NOTE: Pull images and lint chart
-make pull-images ceph
+#NOTE: Lint and package chart
+make ceph
 
 #NOTE: Deploy command
+: ${OSH_INFRA_PATH:="../openstack-helm-infra"}
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
 if [ "$OPENSTACK_VERSION" == "ocata" ]; then
   values="--values=./tools/overrides/releases/ocata/loci.yaml "
@@ -27,13 +28,12 @@ else
   values=""
 fi
 : ${OSH_EXTRA_HELM_ARGS:=""}
-CEPH_FS_ID="$(cat /tmp/ceph-fs-uuid.txt)"
 tee /tmp/radosgw-openstack.yaml <<EOF
 endpoints:
   identity:
     namespace: openstack
   object_store:
-    namespace: ceph
+    namespace: openstack
   ceph_mon:
     namespace: ceph
 network:
@@ -41,7 +41,7 @@ network:
   cluster: 172.17.0.1/16
 deployment:
   storage_secrets: false
-  ceph: false
+  ceph: true
   rbd_provisioner: false
   cephfs_provisioner: false
   client_secrets: false
@@ -51,12 +51,12 @@ bootstrap:
 conf:
   rgw_ks:
     enabled: true
-  ceph:
-    global:
-      fsid: ${CEPH_FS_ID}
+pod:
+  replicas:
+    rgw: 1
 EOF
-helm upgrade --install radosgw-openstack ./ceph \
-  --namespace=openstack $values \
+helm upgrade --install radosgw-openstack ${OSH_INFRA_PATH}/ceph-rgw \
+  --namespace=openstack \
   --values=/tmp/radosgw-openstack.yaml \
   ${OSH_EXTRA_HELM_ARGS} \
   ${OSH_EXTRA_HELM_ARGS_CEPH_RGW}

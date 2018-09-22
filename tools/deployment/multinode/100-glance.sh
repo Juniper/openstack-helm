@@ -17,6 +17,10 @@
 set -xe
 
 #NOTE: Deploy command
+: ${OSH_OPENSTACK_RELEASE:="newton"}
+#NOTE(portdirect), this could be: radosgw, rbd, swift or pvc
+: ${GLANCE_BACKEND:="swift"}
+tee /tmp/glance.yaml <<EOF
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
 if [ "$OPENSTACK_VERSION" == "ocata" ]; then
   values="--values=./tools/overrides/releases/ocata/loci.yaml "
@@ -24,16 +28,29 @@ else
   values=""
 fi
 
-GLANCE_BACKEND="radosgw" # NOTE(portdirect), this could be: radosgw, rbd, swift or pvc
-tee /tmp/glance.yaml << EOF
 storage: ${GLANCE_BACKEND}
 pod:
   replicas:
     api: 2
     registry: 2
 EOF
+if [ "x${OSH_OPENSTACK_RELEASE}" == "xnewton" ]; then
+# NOTE(portdirect): glance APIv1 is required for heat in Newton
+  tee -a /tmp/glance.yaml <<EOF
+conf:
+  glance:
+    DEFAULT:
+      enable_v1_api: true
+      enable_v2_registry: true
+manifests:
+  deployment_registry: true
+  ingress_registry: true
+  pdb_registry: true
+  service_ingress_registry: true
+EOF
+fi
 helm upgrade --install glance ./glance \
-  --namespace=openstack $values \
+  --namespace=openstack \
   --values=/tmp/glance.yaml \
   ${OSH_EXTRA_HELM_ARGS} \
   ${OSH_EXTRA_HELM_ARGS_GLANCE}

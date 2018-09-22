@@ -35,9 +35,13 @@ labels:
   job:
     node_selector_key: openstack-control-plane
     node_selector_value: enabled
+  test:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
 
 images:
   tags:
+    test: docker.io/kolla/ubuntu-source-rally:4.0.0
     bootstrap: docker.io/openstackhelm/heat:newton
     db_init: docker.io/openstackhelm/heat:newton
     heat_db_sync: docker.io/openstackhelm/heat:newton
@@ -51,9 +55,15 @@ images:
     heat_cloudwatch: docker.io/openstackhelm/heat:newton
     heat_engine: docker.io/openstackhelm/heat:newton
     heat_engine_cleaner: docker.io/openstackhelm/heat:newton
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
+    image_repo_sync: docker.io/docker:17.07.0
     opencontrail_heat_init:
   pull_policy: "IfNotPresent"
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
 
 jobs:
   engine_cleaner:
@@ -63,6 +73,206 @@ jobs:
       failed: 1
 
 conf:
+  rally_tests:
+    run_tempest: false
+    tests:
+      HeatStacks.create_update_delete_stack:
+        - args:
+            template_path: /tmp/rally-jobs/random_strings.yaml
+            updated_template_path: /tmp/rally-jobs/updated_random_strings_replace.yaml
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
+      HeatStacks.create_check_delete_stack:
+        - args:
+            template_path: /tmp/rally-jobs/random_strings.yaml
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
+      HeatStacks.create_and_delete_stack:
+        - args:
+            template_path: /tmp/rally-jobs/resource_group_with_constraint.yaml
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
+      HeatStacks.create_and_list_stack:
+        - args:
+            template_path: /tmp/rally-jobs/default.yaml
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
+      HeatStacks.create_snapshot_restore_delete_stack:
+        - args:
+            template_path: /tmp/rally-jobs/random_strings.yaml
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
+      HeatStacks.create_stack_and_list_output:
+        - args:
+            template_path: /tmp/rally-jobs/resource_group_with_outputs.yaml
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
+      HeatStacks.create_stack_and_list_output_via_API:
+        - args:
+            template_path: /tmp/rally-jobs/resource_group_with_outputs.yaml
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
+    templates:
+      - name: /tmp/rally-jobs/default.yaml
+        template: |
+          heat_template_version: 2014-10-16
+      - name: /tmp/rally-jobs/random_strings.yaml
+        template: |
+          heat_template_version: 2014-10-16
+          description: Test template for rally create-update-delete scenario
+          resources:
+            test_string_one:
+              type: OS::Heat::RandomString
+              properties:
+                length: 20
+            test_string_two:
+              type: OS::Heat::RandomString
+              properties:
+                length: 20
+      - name: /tmp/rally-jobs/resource_group_with_constraint.yaml
+        template: |
+          heat_template_version: 2013-05-23
+          description: Template for testing caching.
+          parameters:
+            count:
+              type: number
+              default: 40
+            delay:
+              type: number
+              default: 0.1
+          resources:
+            rg:
+              type: OS::Heat::ResourceGroup
+              properties:
+                count:
+                  get_param: count
+                resource_def:
+                    type: OS::Heat::TestResource
+                    properties:
+                      constraint_prop_secs:
+                        get_param: delay
+      - name: /tmp/rally-jobs/resource_group_with_outputs.yaml
+        template: |
+          heat_template_version: 2013-05-23
+          parameters:
+            attr_wait_secs:
+              type: number
+              default: 0.5
+          resources:
+            rg:
+              type: OS::Heat::ResourceGroup
+              properties:
+                count: 10
+                resource_def:
+                  type: OS::Heat::TestResource
+                  properties:
+                    attr_wait_secs:
+                      get_param: attr_wait_secs
+          outputs:
+            val1:
+              value:
+                get_attr:
+                  - rg
+                  - resource.0.output
+            val2:
+              value:
+                get_attr:
+                  - rg
+                  - resource.1.output
+            val3:
+              value:
+                get_attr:
+                  - rg
+                  - resource.2.output
+            val4:
+              value:
+                get_attr:
+                  - rg
+                  - resource.3.output
+            val5:
+              value:
+                get_attr:
+                  - rg
+                  - resource.4.output
+            val6:
+              value:
+                get_attr:
+                  - rg
+                  - resource.5.output
+            val7:
+              value:
+                get_attr:
+                  - rg
+                  - resource.6.output
+            val8:
+              value:
+                get_attr:
+                  - rg
+                  - resource.7.output
+            val9:
+              value:
+                get_attr:
+                  - rg
+                  - resource.8.output
+            val10:
+              value:
+                get_attr:
+                  - rg
+                  - resource.9.output
+      - name: /tmp/rally-jobs/updated_random_strings_replace.yaml
+        template: |
+          heat_template_version: 2014-10-16
+          description: |
+            Test template for create-update-delete-stack scenario in rally.
+            The template deletes one resource from the stack defined by
+            random-strings.yaml.template and re-creates it with the updated parameters
+            (so-called update-replace). That happens because some parameters cannot be
+            changed without resource re-creation. The template allows to measure performance
+            of update-replace operation.
+          resources:
+            test_string_one:
+              type: OS::Heat::RandomString
+              properties:
+                length: 20
+            test_string_two:
+              type: OS::Heat::RandomString
+              properties:
+                length: 40
   paste:
     pipeline:heat-api:
       pipeline: cors request_id faultwrap http_proxy_to_wsgi versionnegotiation osprofiler authurl authtoken context apiv1app
@@ -211,6 +421,7 @@ conf:
     resource_types:OS::Cinder::QoSSpecs: rule:project_admin
   heat:
     DEFAULT:
+      log_config_append: /etc/heat/logging.conf
       num_engine_workers: 1
       trusts_delegated_roles: ""
       host: heat-engine
@@ -246,6 +457,79 @@ conf:
       endpoint_type: internalURL
     oslo_messaging_notifications:
       driver: messagingv2
+  logging:
+    loggers:
+      keys:
+        - root
+        - heat
+    handlers:
+      keys:
+        - stdout
+        - stderr
+        - "null"
+    formatters:
+      keys:
+        - context
+        - default
+    logger_root:
+      level: WARNING
+      handlers: 'null'
+    logger_heat:
+      level: INFO
+      handlers:
+        - stdout
+      qualname: heat
+    logger_amqp:
+      level: WARNING
+      handlers: stderr
+      qualname: amqp
+    logger_amqplib:
+      level: WARNING
+      handlers: stderr
+      qualname: amqplib
+    logger_eventletwsgi:
+      level: WARNING
+      handlers: stderr
+      qualname: eventlet.wsgi.server
+    logger_sqlalchemy:
+      level: WARNING
+      handlers: stderr
+      qualname: sqlalchemy
+    logger_boto:
+      level: WARNING
+      handlers: stderr
+      qualname: boto
+    handler_null:
+      class: logging.NullHandler
+      formatter: default
+      args: ()
+    handler_stdout:
+      class: StreamHandler
+      args: (sys.stdout,)
+      formatter: context
+    handler_stderr:
+      class: StreamHandler
+      args: (sys.stderr,)
+      formatter: context
+    formatter_context:
+      class: oslo_log.formatters.ContextFormatter
+    formatter_default:
+      format: "%(message)s"
+
+  rabbitmq:
+    #NOTE(rk760n): adding rmq policy to mirror messages from notification queues and set expiration time for the ones
+    policies:
+      - vhost: "heat"
+        name: "ha_ttl_heat"
+        definition:
+          #mirror messges to other nodes in rmq cluster
+          ha-mode: "all"
+          ha-sync-mode: "automatic"
+          #70s
+          message-ttl: 70000
+        priority: 0
+        apply-to: all
+        pattern: '(notifications)\.'
 
 network:
   api:
@@ -297,10 +581,19 @@ bootstrap:
     openstack role create --or-show heat_stack_user
 
 dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - heat-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
   static:
     api:
       jobs:
         - heat-db-sync
+        - heat-rabbit-init
         - heat-ks-user
         - heat-trustee-ks-user
         - heat-domain-ks-user
@@ -308,11 +601,14 @@ dependencies:
       services:
         - endpoint: internal
           service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
         - endpoint: internal
           service: identity
     cfn:
       jobs:
         - heat-db-sync
+        - heat-rabbit-init
         - heat-ks-user
         - heat-trustee-ks-user
         - heat-domain-ks-user
@@ -320,11 +616,14 @@ dependencies:
       services:
         - endpoint: internal
           service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
         - endpoint: internal
           service: identity
     cloudwatch:
       jobs:
         - heat-db-sync
+        - heat-rabbit-init
         - heat-ks-user
         - heat-trustee-ks-user
         - heat-domain-ks-user
@@ -332,6 +631,8 @@ dependencies:
       services:
         - endpoint: internal
           service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
         - endpoint: internal
           service: identity
     db_drop:
@@ -351,6 +652,7 @@ dependencies:
     engine:
       jobs:
         - heat-db-sync
+        - heat-rabbit-init
         - heat-ks-user
         - heat-trustee-ks-user
         - heat-domain-ks-user
@@ -358,6 +660,8 @@ dependencies:
       services:
         - endpoint: internal
           service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
         - endpoint: internal
           service: identity
     engine_cleaner:
@@ -370,6 +674,8 @@ dependencies:
       services:
         - endpoint: internal
           service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
         - endpoint: internal
           service: identity
     ks_endpoints:
@@ -388,8 +694,8 @@ dependencies:
           service: identity
     rabbit_init:
       services:
-        - service: oslo_messaging
-          endpoint: internal
+        - endpoint: internal
+          service: oslo_messaging
     trusts:
       jobs:
         - heat-ks-user
@@ -398,6 +704,16 @@ dependencies:
       services:
         - endpoint: internal
           service: identity
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
+    tests:
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: orchestration
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
@@ -406,18 +722,38 @@ secrets:
     heat: heat-keystone-user
     heat_trustee: heat-keystone-trustee
     heat_stack_user: heat-keystone-stack-user
+    test: heat-keystone-test
   oslo_db:
     admin: heat-db-admin
     heat: heat-db-user
   oslo_messaging:
     admin: heat-rabbitmq-admin
     heat: heat-rabbitmq-user
+  tls:
+    orchestration:
+      api:
+        public: heat-tls-public
+    cloudformation:
+      cfn:
+        public: cloudformation-tls-public
 
 # typically overridden by environmental
 # values, but should include all endpoints
 # required by this chart
 endpoints:
   cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
   identity:
     name: keystone
     auth:
@@ -436,25 +772,33 @@ endpoints:
         username: heat
         password: password
         project_name: service
-        user_domain_name: default
-        project_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
       heat_trustee:
         role: admin
         region_name: RegionOne
         username: heat-trust
         password: password
         project_name: service
-        user_domain_name: default
-        project_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
       heat_stack_user:
         role: admin
         region_name: RegionOne
         username: heat-domain
         password: password
         domain_name: heat
+      test:
+        role: admin
+        region_name: RegionOne
+        username: test
+        password: password
+        project_name: test
+        user_domain_name: service
+        project_domain_name: service
     hosts:
-      default: keystone-api
-      public: keystone
+      default: keystone
+      internal: keystone-api
     host_fqdn_override:
       default: null
     path:
@@ -462,10 +806,9 @@ endpoints:
     scheme:
       default: 'http'
     port:
-      admin:
-        default: 35357
       api:
         default: 80
+        internal: 5000
   orchestration:
     name: heat
     hosts:
@@ -473,6 +816,13 @@ endpoints:
       public: heat
     host_fqdn_override:
       default: null
+      # NOTE(portdirect): this chart supports TLS for fqdn over-ridden public
+      # endpoints using the following format:
+      # public:
+      #   host: null
+      #   tls:
+      #     crt: null
+      #     key: null
     path:
       default: '/v1/%(project_id)s'
     scheme:
@@ -488,6 +838,13 @@ endpoints:
       public: cloudformation
     host_fqdn_override:
       default: null
+      # NOTE(portdirect): this chart supports TLS for fqdn over-ridden public
+      # endpoints using the following format:
+      # public:
+      #   host: null
+      #   tls:
+      #     crt: null
+      #     key: null
     path:
       default: /v1
     scheme:
@@ -557,13 +914,28 @@ endpoints:
       default: rabbitmq
     host_fqdn_override:
       default: null
-    path: /
+    path: /heat
     scheme: rabbit
     port:
       amqp:
         default: 5672
       http:
         default: 15672
+  fluentd:
+    namespace: null
+    name: fluentd
+    hosts:
+      default: fluentd-logging
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: 'http'
+    port:
+      service:
+        default: 24224
+      metrics:
+        default: 24220
 
 pod:
   user:
@@ -597,6 +969,9 @@ pod:
     heat_engine_cleaner:
       init_container: null
       heat_engine_cleaner:
+    heat_tests:
+      init_container: null
+      heat_tests:
   replicas:
     api: 1
     cfn: 1
@@ -734,6 +1109,13 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
 
 manifests:
   configmap_bin: true
@@ -741,15 +1123,16 @@ manifests:
   cron_job_engine_cleaner: true
   deployment_api: true
   deployment_cfn: true
-  deployment_cloudwatch: true
+  deployment_cloudwatch: false
   deployment_engine: true
   ingress_api: true
   ingress_cfn: true
-  ingress_cloudwatch: true
+  ingress_cloudwatch: false
   job_bootstrap: true
   job_db_init: true
   job_db_sync: true
   job_db_drop: false
+  job_image_repo_sync: true
   job_ks_endpoints: true
   job_ks_service: true
   job_ks_user_domain: true
@@ -758,14 +1141,16 @@ manifests:
   job_rabbit_init: true
   pdb_api: true
   pdb_cfn: true
-  pdb_cloudwatch: true
+  pdb_cloudwatch: false
+  pod_rally_test: true
   secret_db: true
+  secret_ingress_tls: true
   secret_keystone: true
   secret_rabbitmq: true
   service_api: true
   service_cfn: true
-  service_cloudwatch: true
+  service_cloudwatch: false
   service_ingress_api: true
   service_ingress_cfn: true
-  service_ingress_cloudwatch: true
+  service_ingress_cloudwatch: false
   statefulset_engine: false

@@ -61,6 +61,7 @@ else
   helm upgrade --install nova ./nova \
       --namespace=openstack \
       --set conf.nova.libvirt.virt_type=qemu \
+      --set conf.nova.libvirt.cpu_mode=none \
       --values /tmp/nova.yaml \
       ${OSH_EXTRA_HELM_ARGS}
 fi
@@ -81,6 +82,7 @@ network:
         num_vfs: 32
         promisc: false
   auto_bridge_add:
+    br-ex: null
     br-physnet3: ${OVSBR}
 conf:
   neutron:
@@ -132,7 +134,7 @@ helm upgrade --install neutron ./neutron \
 export OS_CLOUD=openstack_helm
 openstack service list
 sleep 30 #NOTE(portdirect): Wait for ingress controller to update rules and restart Nginx
-openstack hypervisor list
+openstack compute service list
 openstack network agent list
 
 #NOTE: Exercise the deployment

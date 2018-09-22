@@ -17,18 +17,19 @@ limitations under the License.
 {{- if .Values.manifests.job_bootstrap }}
 {{- $envAll := . }}
 {{- if .Values.bootstrap.enabled }}
-{{- $dependencies := .Values.dependencies.static.bootstrap }}
 
 {{- $mounts_rally_bootstrap := .Values.pod.mounts.rally_bootstrap.rally_bootstrap }}
 {{- $mounts_rally_bootstrap_init := .Values.pod.mounts.rally_bootstrap.init_container }}
 
 {{- $serviceAccountName := "rally-bootstrap" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "bootstrap" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: rally-bootstrap
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
 spec:
   template:
     metadata:
@@ -40,11 +41,10 @@ spec:
       nodeSelector:
         {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies $mounts_rally_bootstrap_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container"  | indent 8 }}
+{{ tuple $envAll "bootstrap" $mounts_rally_bootstrap_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container"  | indent 8 }}
       containers:
         - name: rally-bootstrap
-          image: {{ .Values.images.tags.bootstrap }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "bootstrap" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.bootstrap | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           env:
 {{- with $env := dict "ksUserSecret" .Values.secrets.identity.admin }}

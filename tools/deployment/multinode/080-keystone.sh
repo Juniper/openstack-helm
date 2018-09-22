@@ -24,10 +24,11 @@ else
   values=""
 fi
 helm upgrade --install keystone ./keystone \
-    --namespace=openstack $values \
+    --namespace=openstack \
     --set pod.replicas.api=2 \
     ${OSH_EXTRA_HELM_ARGS} \
     ${OSH_EXTRA_HELM_ARGS_KEYSTONE}
+
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh openstack
 

@@ -15,17 +15,19 @@ limitations under the License.
 */}}
 
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.tests }}
 
 {{- $serviceAccountName := print .Release.Name "-test" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "tests" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: v1
 kind: Pod
 metadata:
   name: "{{.Release.Name}}-test"
+  labels:
+{{ tuple $envAll "congress" "test" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
   annotations:
     "helm.sh/hook": test-success
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
 spec:
   nodeSelector:
     {{ .Values.labels.test.node_selector_key }}: {{ .Values.labels.test.node_selector_value }}
@@ -33,7 +35,7 @@ spec:
   restartPolicy: Never
   containers:
     - name: {{.Release.Name}}-congress-test
-      image: {{ .Values.images.tags.congress_scripted_test }}
+{{ tuple $envAll "congress_scripted_test" | include "helm-toolkit.snippets.image" | indent 6 }}
       env:
 {{- with $env := dict "ksUserSecret" .Values.secrets.identity.admin }}
 {{- include "helm-toolkit.snippets.keystone_openrc_env_vars" $env | indent 8 }}

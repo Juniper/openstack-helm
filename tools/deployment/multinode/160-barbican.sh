@@ -24,7 +24,7 @@ fi
 
 #NOTE: Deploy command
 helm upgrade --install barbican ./barbican \
-  --namespace=openstack $values \
+  --namespace=openstack \
   --set pod.replicas.api=2 \
   ${OSH_EXTRA_HELM_ARGS} \
   ${OSH_EXTRA_HELM_ARGS_BARBICAN}

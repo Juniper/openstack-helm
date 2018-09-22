@@ -16,20 +16,26 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_api }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.api }}
 
 {{- $mounts_keystone_api := .Values.pod.mounts.keystone_api.keystone_api }}
 {{- $mounts_keystone_api_init := .Values.pod.mounts.keystone_api.init_container }}
 
 {{- $serviceAccountName := "keystone-api" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "api" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: keystone-api
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "keystone" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
   replicas: {{ .Values.pod.replicas.api }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "keystone" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
 {{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
   template:
     metadata:
@@ -46,12 +52,13 @@ spec:
         {{ .Values.labels.api.node_selector_key }}: {{ .Values.labels.api.node_selector_value }}
       terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.api.timeout | default "30" }}
       initContainers:
-{{ tuple $envAll $dependencies $mounts_keystone_api_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "api" $mounts_keystone_api_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: keystone-api
-          image: {{ .Values.images.tags.keystone_api }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "keystone_api" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.api | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
+          securityContext:
+            runAsUser: {{ .Values.pod.user.keystone.uid }}
           command:
             - /tmp/keystone-api.sh
             - start
@@ -62,25 +69,36 @@ spec:
                   - /tmp/keystone-api.sh
                   - stop
           ports:
+            {{- $portInt := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
             - name: ks-pub
-              containerPort: {{ tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
-            - name: ks-adm
-              containerPort: {{ tuple "identity" "internal" "admin" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+              containerPort: {{ $portInt }}
           readinessProbe:
             httpGet:
               scheme: HTTP
               path: /
-              port: {{ tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+              port: {{ $portInt }}
             initialDelaySeconds: 15
             periodSeconds: 10
           volumeMounts:
           - name: etckeystone
             mountPath: /etc/keystone
+          - name: logs-apache
+            mountPath: /var/log/apache2
+          - name: run-apache
+            mountPath: /var/run/apache2
           - name: wsgi-keystone
             mountPath: /var/www/cgi-bin/keystone
           - name: keystone-etc
             mountPath: /etc/keystone/keystone.conf
             subPath: keystone.conf
+            readOnly: true
+          - name: keystone-etc
+            mountPath: /etc/apache2/ports.conf
+            subPath: ports.conf
+            readOnly: true
+          - name: keystone-etc
+            mountPath: {{ .Values.conf.keystone.DEFAULT.log_config_append }}
+            subPath: {{ base .Values.conf.keystone.DEFAULT.log_config_append }}
             readOnly: true
           - name: keystone-etc
             mountPath: /etc/keystone/keystone-paste.ini
@@ -124,9 +142,13 @@ spec:
         emptyDir: {}
       - name: wsgi-keystone
         emptyDir: {}
+      - name: logs-apache
+        emptyDir: {}
+      - name: run-apache
+        emptyDir: {}
       - name: keystone-etc
-        configMap:
-          name: keystone-etc
+        secret:
+          secretName: keystone-etc
           defaultMode: 0444
       - name: keystone-bin
         configMap:

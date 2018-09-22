@@ -16,17 +16,20 @@ limitations under the License.
 
 {{- if or ( .Values.manifests.deployment_engine ) ( .Values.manifests.statefulset_engine ) }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.engine }}
 
 {{- $mounts_heat_engine := .Values.pod.mounts.heat_engine.heat_engine }}
 {{- $mounts_heat_engine_init := .Values.pod.mounts.heat_engine.init_container }}
 
 {{- $serviceAccountName := "heat-engine" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "engine" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 metadata:
   name: heat-engine
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "heat" "engine" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 {{- if .Values.manifests.deployment_engine }}
 kind: Deployment
 spec:
@@ -37,6 +40,9 @@ spec:
   serviceName: heat-engine
 {{- end }}
   replicas: {{ .Values.pod.replicas.engine }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "heat" "engine" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
   template:
     metadata:
       labels:
@@ -61,7 +67,7 @@ spec:
       {{- end }}
       {{- end }}
       initContainers:
-{{ tuple $envAll $dependencies $mounts_heat_engine_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "engine" $mounts_heat_engine_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
         {{- if .Values.conf.heat.clients_contrail }}
         - name: opencontrail-heat-init
           image: {{ .Values.images.tags.opencontrail_heat_init }}
@@ -74,8 +80,7 @@ spec:
         {{- end }}
       containers:
         - name: heat-engine
-          image: {{ .Values.images.tags.heat_engine }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "heat_engine" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.engine | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           securityContext:
             runAsUser: {{ .Values.pod.user.heat.uid }}
@@ -100,6 +105,10 @@ spec:
               subPath: heat.conf
               readOnly: true
             - name: heat-etc
+              mountPath: {{ .Values.conf.heat.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.heat.DEFAULT.log_config_append }}
+              readOnly: true
+            - name: heat-etc
               mountPath: /etc/heat/policy.json
               subPath: policy.json
               readOnly: true
@@ -120,8 +129,8 @@ spec:
             name: heat-bin
             defaultMode: 0555
         - name: heat-etc
-          configMap:
-            name: heat-etc
+          secret:
+            secretName: heat-etc
             defaultMode: 0444
         {{- if .Values.conf.heat.clients_contrail }}
         - name: heat-plugin-shared

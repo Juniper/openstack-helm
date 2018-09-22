@@ -25,13 +25,12 @@ else
 fi
 CEPH_PUBLIC_NETWORK="$(./tools/deployment/multinode/kube-node-subnet.sh)"
 CEPH_CLUSTER_NETWORK="$(./tools/deployment/multinode/kube-node-subnet.sh)"
-CEPH_FS_ID="$(cat /tmp/ceph-fs-uuid.txt)"
 tee /tmp/radosgw-openstack.yaml <<EOF
 endpoints:
   identity:
     namespace: openstack
   object_store:
-    namespace: ceph
+    namespace: openstack
   ceph_mon:
     namespace: ceph
 network:
@@ -39,7 +38,7 @@ network:
   cluster: ${CEPH_CLUSTER_NETWORK}
 deployment:
   storage_secrets: false
-  ceph: false
+  ceph: true
   rbd_provisioner: false
   cephfs_provisioner: false
   client_secrets: false
@@ -47,14 +46,13 @@ deployment:
 bootstrap:
   enabled: false
 conf:
-  ceph:
-    global:
-      fsid: ${CEPH_FS_ID}
   rgw_ks:
     enabled: true
 EOF
-helm upgrade --install radosgw-openstack ./ceph \
-  --namespace=openstack $values \
+
+: ${OSH_INFRA_PATH:="../openstack-helm-infra"}
+helm upgrade --install radosgw-openstack ${OSH_INFRA_PATH}/ceph-rgw \
+  --namespace=openstack \
   --values=/tmp/radosgw-openstack.yaml \
   ${OSH_EXTRA_HELM_ARGS} \
   ${OSH_EXTRA_HELM_ARGS_HEAT}

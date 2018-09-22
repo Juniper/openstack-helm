@@ -16,6 +16,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */}}
 
-set -x
+set -ex
 exec senlin-engine \
       --config-file /etc/senlin/senlin.conf

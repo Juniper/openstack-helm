@@ -23,7 +23,7 @@ else
 fi
 
 #NOTE: Deploy command
-# dont scale out ds node
+# don't scale out ds node
 # only one node per environment should be in active state
 # https://docs.openstack.org/congress/latest/admin/ha-overview.html#ha-overview
 helm upgrade --install congress ./congress \

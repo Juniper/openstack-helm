@@ -18,7 +18,7 @@
 # name: value
 
 # radosgw, rbd, swift or pvc
-storage: radosgw
+storage: swift
 
 labels:
   api:
@@ -39,7 +39,7 @@ release_group: null
 images:
   tags:
     test: docker.io/kolla/ubuntu-source-rally:4.0.0
-    glance_storage_init: docker.io/ceph/daemon:tag-build-master-luminous-ubuntu-16.04
+    glance_storage_init: docker.io/port/ceph-config-helper:v1.10.3
     db_init: docker.io/openstackhelm/heat:newton
     glance_db_sync: docker.io/openstackhelm/glance:newton
     db_drop: docker.io/openstackhelm/heat:newton
@@ -51,8 +51,14 @@ images:
     glance_registry: docker.io/openstackhelm/glance:newton
     # Bootstrap image requires curl
     bootstrap: docker.io/openstackhelm/heat:newton
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
+    image_repo_sync: docker.io/docker:17.07.0
   pull_policy: "IfNotPresent"
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
 
 bootstrap:
   enabled: true
@@ -72,6 +78,10 @@ bootstrap:
         properties:
           hypervisor_type: "qemu"
           os_distro: "cirros"
+
+ceph_client:
+  configmap: ceph-etc
+  user_secret_name: pvc-ceph-client-key
 
 conf:
   rally_tests:
@@ -215,10 +225,13 @@ conf:
     add_metadef_tags: ''
   glance:
     DEFAULT:
+      log_config_append: /etc/glance/logging.conf
       # NOTE(portdirect): the bind port should not be defined, and is manipulated
       # via the endpoints section.
       bind_port: null
       workers: 1
+      enable_v1_api: False
+      enable_v2_registry: False
     keystone_authtoken:
       auth_type: password
       auth_version: v3
@@ -233,12 +246,71 @@ conf:
       swift_store_container: glance
       swift_store_create_container_on_put: true
       swift_store_config_file: /etc/glance/swift-store.conf
+      swift_store_endpoint_type: internalURL
     paste_deploy:
       flavor: keystone
     database:
       max_retries: -1
     oslo_messaging_notifications:
       driver: messagingv2
+  logging:
+    loggers:
+      keys:
+        - root
+        - glance
+    handlers:
+      keys:
+        - stdout
+        - stderr
+        - "null"
+    formatters:
+      keys:
+        - context
+        - default
+    logger_root:
+      level: WARNING
+      handlers: 'null'
+    logger_glance:
+      level: INFO
+      handlers:
+        - stdout
+      qualname: glance
+    logger_amqp:
+      level: WARNING
+      handlers: stderr
+      qualname: amqp
+    logger_amqplib:
+      level: WARNING
+      handlers: stderr
+      qualname: amqplib
+    logger_eventletwsgi:
+      level: WARNING
+      handlers: stderr
+      qualname: eventlet.wsgi.server
+    logger_sqlalchemy:
+      level: WARNING
+      handlers: stderr
+      qualname: sqlalchemy
+    logger_boto:
+      level: WARNING
+      handlers: stderr
+      qualname: boto
+    handler_null:
+      class: logging.NullHandler
+      formatter: default
+      args: ()
+    handler_stdout:
+      class: StreamHandler
+      args: (sys.stdout,)
+      formatter: context
+    handler_stderr:
+      class: StreamHandler
+      args: (sys.stderr,)
+      formatter: context
+    formatter_context:
+      class: oslo_log.formatters.ContextFormatter
+    formatter_default:
+      format: "%(message)s"
   paste_registry:
     pipeline:glance-registry:
       pipeline: healthcheck osprofiler unauthenticated-context registryapp
@@ -292,7 +364,24 @@ conf:
     user_domain_name = {{ .Values.endpoints.identity.auth.glance.user_domain_name }}
     project_domain_name = {{ .Values.endpoints.identity.auth.glance.project_domain_name }}
     auth_version = 3
+    # NOTE(portdirect): https://bugs.launchpad.net/glance-store/+bug/1620999
+    project_domain_id = ""
+    user_domain_id = ""
     {{- end -}}
+  rabbitmq:
+    #NOTE(rk760n): adding rmq policy to mirror messages from notification queues and set expiration time for the ones
+    policies:
+      - vhost: "glance"
+        name: "ha_ttl_glance"
+        definition:
+          #mirror messges to other nodes in rmq cluster
+          ha-mode: "all"
+          ha-sync-mode: "automatic"
+          #70s
+          message-ttl: 70000
+        priority: 0
+        apply-to: all
+        pattern: '(notifications)\.'
 
 network:
   api:
@@ -303,7 +392,7 @@ network:
         cluster: "nginx-cluster"
       annotations:
         nginx.ingress.kubernetes.io/rewrite-target: /
-        nginx.ingress.kubernetes.io/proxy-body-size: "1024M"
+        nginx.ingress.kubernetes.io/proxy-body-size: "0"
     external_policy_local: false
     node_port:
       enabled: false
@@ -326,11 +415,20 @@ volume:
   size: 2Gi
 
 dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - glance-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
   static:
     api:
       jobs:
         - glance-storage-init
         - glance-db-sync
+        - glance-rabbit-init
         - glance-ks-user
         - glance-ks-endpoints
       services:
@@ -341,11 +439,7 @@ dependencies:
         - endpoint: internal
           service: oslo_messaging
     bootstrap:
-      jobs:
-        - glance-storage-init
-        - glance-db-sync
-        - glance-ks-user
-        - glance-ks-endpoints
+      jobs: null
       services:
         - endpoint: internal
           service: identity
@@ -383,12 +477,13 @@ dependencies:
           service: identity
     rabbit_init:
       services:
-        - service: oslo_messaging
-          endpoint: internal
+        - endpoint: internal
+          service: oslo_messaging
     registry:
       jobs:
         - glance-storage-init
         - glance-db-sync
+        - glance-rabbit-init
         - glance-ks-user
         - glance-ks-endpoints
       services:
@@ -399,6 +494,8 @@ dependencies:
         - endpoint: internal
           service: image
     storage_init:
+      jobs:
+        - glance-ks-user
       services: null
     tests:
       services:
@@ -408,6 +505,10 @@ dependencies:
           service: identity
         - endpoint: internal
           service: image
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
@@ -422,6 +523,10 @@ secrets:
   oslo_messaging:
     admin: glance-rabbitmq-admin
     glance: glance-rabbitmq-user
+  tls:
+    image:
+      api:
+        public: glance-tls-public
 
 
 # typically overridden by environmental
@@ -429,6 +534,18 @@ secrets:
 # required by this chart
 endpoints:
   cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
   identity:
     name: keystone
     auth:
@@ -445,19 +562,19 @@ endpoints:
         username: glance
         password: password
         project_name: service
-        user_domain_name: default
-        project_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
       test:
         role: admin
         region_name: RegionOne
         username: test
         password: password
         project_name: test
-        user_domain_name: default
-        project_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
     hosts:
-      default: keystone-api
-      public: keystone
+      default: keystone
+      internal: keystone-api
     host_fqdn_override:
       default: null
     path:
@@ -465,10 +582,9 @@ endpoints:
     scheme:
       default: http
     port:
-      admin:
-        default: 35357
       api:
         default: 80
+        internal: 5000
   image:
     name: glance
     hosts:
@@ -476,6 +592,13 @@ endpoints:
       public: glance
     host_fqdn_override:
       default: null
+      # NOTE(portdirect): this chart supports TLS for fqdn over-ridden public
+      # endpoints using the following format:
+      # public:
+      #   host: null
+      #   tls:
+      #     crt: null
+      #     key: null
     path:
       default: null
     scheme:
@@ -543,13 +666,32 @@ endpoints:
       default: rabbitmq
     host_fqdn_override:
       default: null
-    path: /
+    path: /glance
     scheme: rabbit
     port:
       amqp:
         default: 5672
       http:
         default: 15672
+  object_store:
+    name: swift
+    namespace: ceph
+    auth:
+      glance:
+        tmpurlkey: supersecret
+    hosts:
+      default: ceph-rgw
+      public: radosgw
+    host_fqdn_override:
+      default: null
+    path:
+      default: /swift/v1/KEY_$(tenant_id)s
+    scheme:
+      default: http
+    port:
+      api:
+        default: 8088
+        public: 80
   ceph_object_store:
     name: radosgw
     namespace: ceph
@@ -560,6 +702,7 @@ endpoints:
         tmpurlkey: supersecret
     hosts:
       default: ceph-rgw
+      public: radosgw
     host_fqdn_override:
       default: null
     path:
@@ -569,6 +712,22 @@ endpoints:
     port:
       api:
         default: 8088
+        public: 80
+  fluentd:
+    namespace: null
+    name: fluentd
+    hosts:
+      default: fluentd-logging
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: 'http'
+    port:
+      service:
+        default: 24224
+      metrics:
+        default: 24220
 
 pod:
   user:
@@ -698,32 +857,41 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
 
 manifests:
   configmap_bin: true
   configmap_etc: true
   deployment_api: true
-  deployment_registry: true
+  deployment_registry: false
   ingress_api: true
-  ingress_registry: true
+  ingress_registry: false
   job_bootstrap: true
   job_clean: true
   job_db_init: true
   job_db_sync: true
   job_db_drop: false
+  job_image_repo_sync: true
   job_ks_endpoints: true
   job_ks_service: true
   job_ks_user: true
   job_storage_init: true
   job_rabbit_init: true
   pdb_api: true
-  pdb_registry: true
+  pdb_registry: false
   pod_rally_test: true
   pvc_images: true
   secret_db: true
+  secret_ingress_tls: true
   secret_keystone: true
   secret_rabbitmq: true
   service_ingress_api: true
-  service_ingress_registry: true
+  service_ingress_registry: false
   service_api: true
   service_registry: true

@@ -30,6 +30,7 @@ images:
     heat_cloudwatch: 'docker.io/kolla/ubuntu-source-heat-api:ocata'
     heat_db_sync: 'docker.io/kolla/ubuntu-source-heat-api:ocata'
     heat_engine: 'docker.io/kolla/ubuntu-source-heat-engine:ocata'
+    heat_engine_cleaner: 'docker.io/kolla/ubuntu-source-heat-engine:ocata'
     horizon: 'docker.io/kolla/ubuntu-source-horizon:ocata'
     horizon_db_sync: 'docker.io/kolla/ubuntu-source-horizon:ocata'
     ironic_api: 'docker.io/kolla/ubuntu-source-ironic-api:ocata'
@@ -43,6 +44,7 @@ images:
     keystone_credential_rotate: 'docker.io/kolla/ubuntu-source-keystone:ocata'
     keystone_credential_setup: 'docker.io/kolla/ubuntu-source-keystone:ocata'
     keystone_db_sync: 'docker.io/kolla/ubuntu-source-keystone:ocata'
+    keystone_domain_manage: 'docker.io/kolla/ubuntu-source-keystone:ocata'
     keystone_fernet_rotate: 'docker.io/kolla/ubuntu-source-keystone:ocata'
     keystone_fernet_setup: 'docker.io/kolla/ubuntu-source-keystone:ocata'
     ks_endpoints: 'docker.io/kolla/ubuntu-source-heat-engine:ocata'
@@ -60,6 +62,7 @@ images:
     neutron_server: 'docker.io/kolla/ubuntu-source-neutron-server:ocata'
     nova_api: 'docker.io/kolla/ubuntu-source-nova-api:ocata'
     nova_cell_setup: 'docker.io/kolla/ubuntu-source-nova-api:ocata'
+    nova_cell_setup_init: 'docker.io/kolla/ubuntu-source-nova-api:ocata'
     nova_compute: 'docker.io/kolla/ubuntu-source-nova-compute:ocata'
     nova_compute_ironic: 'docker.io/kolla/ubuntu-source-nova-compute-ironic:ocata'
     nova_compute_ssh: 'docker.io/kolla/ubuntu-source-nova-ssh:ocata'
@@ -76,10 +79,14 @@ images:
     senlin_api: 'docker.io/kolla/ubuntu-source-senlin-api:ocata'
     senlin_db_sync: 'docker.io/kolla/ubuntu-source-senlin-api:ocata'
     senlin_engine: 'docker.io/kolla/ubuntu-source-senlin-engine:ocata'
+    senlin_engine_cleaner: 'docker.io/kolla/ubuntu-source-senlin-engine:ocata'
+    tempest: 'docker.io/kolla/ubuntu-source-tempest:4.0.3'
     test: 'docker.io/kolla/ubuntu-source-rally:4.0.0'
 pod:
   #NOTE(portdirect): see https://github.com/openstack/kolla/blob/f62f5ae2fa5e7808722f9b37b48a50b39c20b46d/kolla/common/config.py#L695-L998
   user:
+    keystone:
+      uid: 42425
     barbican:
       uid: 42403
     cinder:

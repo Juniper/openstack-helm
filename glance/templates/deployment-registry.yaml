@@ -16,20 +16,26 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_registry }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.registry }}
 
 {{- $mounts_glance_registry := .Values.pod.mounts.glance_registry.glance_registry }}
 {{- $mounts_glance_registry_init := .Values.pod.mounts.glance_registry.init_container }}
 
 {{- $serviceAccountName := "glance-registry" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "registry" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: glance-registry
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "glance" "registry" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
   replicas: {{ .Values.pod.replicas.registry }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "glance" "registry" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
 {{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
   template:
     metadata:
@@ -46,11 +52,10 @@ spec:
         {{ .Values.labels.registry.node_selector_key }}: {{ .Values.labels.registry.node_selector_value }}
       terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.registry.timeout | default "600" }}
       initContainers:
-{{ tuple $envAll $dependencies $mounts_glance_registry_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "registry" $mounts_glance_registry_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: glance-registry
-          image: {{ .Values.images.tags.glance_registry }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "glance_registry" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.registry | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           securityContext:
             runAsUser: {{ .Values.pod.user.glance.uid }}
@@ -81,6 +86,10 @@ spec:
               subPath: glance-registry.conf
               readOnly: true
             - name: glance-etc
+              mountPath: {{ .Values.conf.glance.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.glance.DEFAULT.log_config_append }}
+              readOnly: true
+            - name: glance-etc
               mountPath: /etc/glance/glance-registry-paste.ini
               subPath: glance-registry-paste.ini
               readOnly: true
@@ -97,8 +106,8 @@ spec:
             name: glance-bin
             defaultMode: 0555
         - name: glance-etc
-          configMap:
-            name: glance-etc
+          secret:
+            secretName: glance-etc
             defaultMode: 0444
 {{ if $mounts_glance_registry.volumes }}{{ toYaml $mounts_glance_registry.volumes | indent 8 }}{{ end }}
 {{- end }}

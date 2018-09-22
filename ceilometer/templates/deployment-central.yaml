@@ -16,20 +16,26 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_central }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.central }}
 
 {{- $mounts_ceilometer_central := .Values.pod.mounts.ceilometer_central.ceilometer_central }}
 {{- $mounts_ceilometer_central_init := .Values.pod.mounts.ceilometer_central.init_container }}
 
 {{- $serviceAccountName := "ceilometer-central" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "central" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ceilometer-central
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "ceilometer" "central" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
   replicas: {{ .Values.pod.replicas.central }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "ceilometer" "central" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
 {{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
   template:
     metadata:
@@ -45,11 +51,10 @@ spec:
       nodeSelector:
         {{ .Values.labels.central.node_selector_key }}: {{ .Values.labels.central.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies $mounts_ceilometer_central_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "central" $mounts_ceilometer_central_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: ceilometer-central
-          image: {{ .Values.images.tags.ceilometer_central }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "ceilometer_central" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.central | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           command:
             - /tmp/ceilometer-central.sh
@@ -93,8 +98,8 @@ spec:
         - name: pod-etc-ceilometer
           emptyDir: {}
         - name: ceilometer-etc
-          configMap:
-            name: ceilometer-etc
+          secret:
+            secretName: ceilometer-etc
             defaultMode: 0444
         - name: ceilometer-bin
           configMap:

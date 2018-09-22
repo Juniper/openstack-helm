@@ -16,16 +16,23 @@ limitations under the License.
 
 {{- if .Values.manifests.configmap_bin }}
 {{- $envAll := . }}
+{{- $rallyTests := .Values.conf.rally_tests }}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: senlin-bin
 data:
+{{- if .Values.images.local_registry.active }}
+  image-repo-sync.sh: |
+{{- include "helm-toolkit.scripts.image_repo_sync" . | indent 4 }}
+{{- end }}
 {{- if .Values.bootstrap.enabled }}
   bootstrap.sh: |
 {{ tuple "bin/_bootstrap.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
 {{- end }}
+  senlin-test.sh: |
+{{ tuple "bin/_senlin-test.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   db-init.py: |
 {{- include "helm-toolkit.scripts.db_init" . | indent 4 }}
   db-sync.sh: |
@@ -42,6 +49,8 @@ data:
 {{ tuple "bin/_senlin-api.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   senlin-engine.sh: |
 {{ tuple "bin/_senlin-engine.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  senlin-engine-cleaner.sh: |
+{{ tuple "bin/_senlin-engine-cleaner.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   rabbit-init.sh: |
 {{- include "helm-toolkit.scripts.rabbit_init" . | indent 4 }}
 {{- end }}

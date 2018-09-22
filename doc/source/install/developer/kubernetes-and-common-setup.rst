@@ -2,15 +2,6 @@
 Kubernetes and Common Setup
 ===========================
 
-Packages
---------
-
-Install the latest versions of Git, CA Certs & Make if necessary
-
-.. literalinclude:: ../../../../tools/deployment/developer/common/000-install-packages.sh
-    :language: shell
-    :lines: 1,17-
-
 Clone the OpenStack-Helm Repos
 ------------------------------
 
@@ -26,10 +17,10 @@ should be cloned:
     git clone https://git.openstack.org/openstack/openstack-helm.git
 
 
-.. note::
+.. warning::
   This installation, by default will use Google DNS servers, 8.8.8.8 or 8.8.4.4
-  and updates resolv.conf. These DNS nameserver entries can be changed by
-  updating file ``/opt/openstack-helm-infra/tools/images/kubeadm-aio/assets/opt/playbooks/vars.yaml``
+  and updates ``resolv.conf``. These DNS nameserver entries can be changed by
+  updating file ``openstack-helm-infra/tools/images/kubeadm-aio/assets/opt/playbooks/vars.yaml``
   under section ``external_dns_nameservers``.
 
 Deploy Kubernetes & Helm
@@ -42,8 +33,14 @@ You may now deploy kubernetes, and helm onto your machine, first move into the
     :language: shell
     :lines: 1,17-
 
+Alternatively, this step can be performed by running the script directly:
+
+.. code-block:: shell
+
+  ./tools/deployment/developer/common/010-deploy-k8s.sh
+
 This command will deploy a single node KubeADM administered cluster. This will
-use the parameters in ``${OSH_INFRA_PATH}/tools/gate/playbooks/vars.yaml`` to control the
+use the parameters in ``${OSH_INFRA_PATH}/playbooks/vars.yaml`` to control the
 deployment, which can be over-ridden by adding entries to
 ``${OSH_INFRA_PATH}/tools/gate/devel/local-vars.yaml``.
 

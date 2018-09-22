@@ -16,20 +16,26 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_placement }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.api }}
 
 {{- $mounts_nova_placement := .Values.pod.mounts.nova_placement.nova_placement }}
 {{- $mounts_nova_placement_init := .Values.pod.mounts.nova_placement.init_container }}
 
 {{- $serviceAccountName := "nova-placement-api" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "api" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nova-placement-api
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "nova" "placement" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
   replicas: {{ .Values.pod.replicas.placement }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "nova" "placement" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
 {{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
   template:
     metadata:
@@ -46,11 +52,10 @@ spec:
         {{ .Values.labels.placement.node_selector_key }}: {{ .Values.labels.placement.node_selector_value }}
       terminationGracePeriodSeconds: {{ .Values.pod.lifecycle.termination_grace_period.placement.timeout | default "30" }}
       initContainers:
-{{ tuple $envAll $dependencies $mounts_nova_placement_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "api" $mounts_nova_placement_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: nova-placement-api
-          image: {{ .Values.images.tags.nova_placement }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "nova_placement" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.placement | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           command:
             - /tmp/nova-placement-api.sh
@@ -82,6 +87,10 @@ spec:
               subPath: nova.conf
               readOnly: true
             - name: nova-etc
+              mountPath: {{ .Values.conf.nova.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.nova.DEFAULT.log_config_append }}
+              readOnly: true
+            - name: nova-etc
               mountPath: /etc/nova/api-paste.ini
               subPath: api-paste.ini
               readOnly: true
@@ -102,8 +111,8 @@ spec:
             name: nova-bin
             defaultMode: 0555
         - name: nova-etc
-          configMap:
-            name: nova-etc
+          secret:
+            secretName: nova-etc
             defaultMode: 0444
 {{- if $mounts_nova_placement.volumes }}{{ toYaml $mounts_nova_placement.volumes | indent 8 }}{{ end }}
 {{- end }}

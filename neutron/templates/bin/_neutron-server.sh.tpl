@@ -26,6 +26,11 @@ function start () {
         --config-file /etc/neutron/plugins/opencontrail/ContrailPlugin.ini
 {{- else }}
         --config-file /etc/neutron/plugins/ml2/ml2_conf.ini
+{{- if .Values.conf.plugins.taas.taas.enabled }} \
+        --config-file /etc/neutron/taas_plugin.ini
+{{- end }}
+{{- if ( has "sriov" .Values.network.backend ) }} \
+        --config-file /etc/neutron/plugins/ml2/sriov_agent.ini
 {{- end }}
 {{- if ( has "sriov" .Values.network.backend ) }} \
         --config-file /etc/neutron/plugins/ml2/sriov_agent.ini

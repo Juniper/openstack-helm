@@ -18,20 +18,6 @@ limitations under the License.
 
 set -ex
 
-# configure external bridge
-external_bridge="{{- .Values.network.external_bridge -}}"
-external_interface="{{- .Values.network.interface.external -}}"
-if [ -n "${external_bridge}" ] ; then
-    # adding existing bridge would break out the script when -e is set
-    set +e
-    ip link add name $external_bridge type bridge
-    set -e
-    ip link set dev $external_bridge up
-    if [ -n "$external_interface" ] ; then
-        ip link set dev $external_interface master $external_bridge
-    fi
-fi
-
 # configure all bridge mappings defined in config
 {{- range $br, $phys := .Values.network.auto_bridge_add }}
 if [ -n "{{- $br -}}" ] ; then
@@ -55,8 +41,13 @@ if [ -z "${tunnel_interface}" ] ; then
 fi
 
 # determine local-ip dynamically based on interface provided but only if tunnel_types is not null
-IP=$(ip a s $tunnel_interface | grep 'inet ' | awk '{print $2}' | awk -F "/" '{print $1}')
-cat <<EOF>/tmp/pod-shared/ml2-local-ip.ini
+LOCAL_IP=$(ip a s $tunnel_interface | grep 'inet ' | awk '{print $2}' | awk -F "/" '{print $1}')
+if [ -z "${LOCAL_IP}" ] ; then
+  echo "Var LOCAL_IP is empty"
+  exit 1
+fi
+
+tee > /tmp/pod-shared/ml2-local-ip.ini << EOF
 [vxlan]
-local_ip = $IP
+local_ip = "${LOCAL_IP}"
 EOF

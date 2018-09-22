@@ -17,9 +17,16 @@
 set -xe
 
 #NOTE: Deploy command
-helm upgrade --install mariadb ./mariadb \
+tee /tmp/mariadb.yaml << EOF
+pod:
+  replicas:
+    server: 3
+    ingress: 3
+EOF
+: ${OSH_INFRA_PATH:="../openstack-helm-infra"}
+helm upgrade --install mariadb ${OSH_INFRA_PATH}/mariadb \
     --namespace=openstack \
-    --set pod.replicas.server=3 \
+    --values=/tmp/mariadb.yaml \
     ${OSH_EXTRA_HELM_ARGS} \
     ${OSH_EXTRA_HELM_ARGS_MARIADB}
 #NOTE: Wait for deploy

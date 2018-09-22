@@ -16,19 +16,26 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_executor }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.executor }}
+
 {{- $mounts_mistral_executor := .Values.pod.mounts.mistral_executor.mistral_executor }}
 {{- $mounts_mistral_executor_init := .Values.pod.mounts.mistral_executor.init_container }}
 
 {{- $serviceAccountName := "mistral-executor" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "executor" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mistral-executor
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "mistral" "executor" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
   replicas: {{ .Values.pod.replicas.executor }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "mistral" "executor" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
 {{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
   template:
     metadata:
@@ -44,11 +51,10 @@ spec:
       nodeSelector:
         {{ .Values.labels.executor.node_selector_key }}: {{ .Values.labels.executor.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies $mounts_mistral_executor_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "executor" $mounts_mistral_executor_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: mistral-executor
-          image: {{ .Values.images.tags.mistral_executor }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "mistral_executor" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.executor | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           securityContext:
             runAsUser: {{ .Values.pod.user.mistral.uid }}
@@ -65,6 +71,10 @@ spec:
               mountPath: /etc/mistral/mistral.conf
               subPath: mistral.conf
               readOnly: true
+            - name: mistral-etc
+              mountPath: {{ .Values.conf.mistral.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.mistral.DEFAULT.log_config_append }}
+              readOnly: true
 {{ if $mounts_mistral_executor.volumeMounts }}{{ toYaml $mounts_mistral_executor.volumeMounts | indent 12 }}{{ end }}
       volumes:
         - name: pod-etc-mistral
@@ -74,8 +84,8 @@ spec:
             name: mistral-bin
             defaultMode: 0555
         - name: mistral-etc
-          configMap:
-            name: mistral-etc
+          secret:
+            secretName: mistral-etc
             defaultMode: 0444
 {{ if $mounts_mistral_executor.volumes }}{{ toYaml $mounts_mistral_executor.volumes | indent 8 }}{{ end }}
 {{- end }}

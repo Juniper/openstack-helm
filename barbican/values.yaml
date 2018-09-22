@@ -10,6 +10,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Default values for barbican.
+# This is a YAML-formatted file.
+# Declare name/value pairs to be passed into your templates.
+# name: value
+
 labels:
   api:
     node_selector_key: openstack-control-plane
@@ -26,7 +31,7 @@ release_group: null
 images:
   tags:
     bootstrap: docker.io/openstackhelm/heat:newton
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
     scripted_test: docker.io/openstackhelm/heat:newton
     db_init: docker.io/openstackhelm/heat:newton
     barbican_db_sync: docker.io/openstackhelm/barbican:newton
@@ -36,7 +41,13 @@ images:
     ks_endpoints: docker.io/openstackhelm/heat:newton
     barbican_api: docker.io/openstackhelm/barbican:newton
     rabbit_init: docker.io/rabbitmq:3.7-management
+    image_repo_sync: docker.io/docker:17.07.0
   pull_policy: "IfNotPresent"
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
 
 pod:
   user:
@@ -144,6 +155,13 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
 
 network:
   api:
@@ -166,17 +184,28 @@ bootstrap:
     openstack token issue
 
 dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - barbican-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
   static:
     api:
       jobs:
         - barbican-db-sync
         - barbican-ks-user
         - barbican-ks-endpoints
+        - barbican-rabbit-init
       services:
         - endpoint: internal
           service: oslo_db
         - endpoint: internal
           service: identity
+        - endpoint: internal
+          service: oslo_messaging
     db_drop:
       services:
         - endpoint: internal
@@ -191,6 +220,10 @@ dependencies:
       services:
         - endpoint: internal
           service: oslo_db
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
     ks_endpoints:
       jobs:
         - barbican-ks-service
@@ -207,8 +240,8 @@ dependencies:
           service: identity
     rabbit_init:
       services:
-      - service: oslo_messaging
-        endpoint: internal
+        - endpoint: internal
+          service: oslo_messaging
 
 conf:
   paste:
@@ -387,6 +420,7 @@ conf:
   barbican:
     DEFAULT:
       transport_url: null
+      log_config_append: /etc/barbican/logging.conf
     keystone_authtoken:
       auth_type: password
       auth_version: v3
@@ -398,6 +432,64 @@ conf:
       #NOTE(portdirect): the bind port should not be defined, and is manipulated
       # via the endpoints section.
       bind_port: null
+  logging:
+    loggers:
+      keys:
+        - root
+        - barbican
+    handlers:
+      keys:
+        - stdout
+        - stderr
+        - "null"
+    formatters:
+      keys:
+        - context
+        - default
+    logger_root:
+      level: WARNING
+      handlers: 'null'
+    logger_barbican:
+      level: INFO
+      handlers:
+        - stdout
+      qualname: barbican
+    logger_amqp:
+      level: WARNING
+      handlers: stderr
+      qualname: amqp
+    logger_amqplib:
+      level: WARNING
+      handlers: stderr
+      qualname: amqplib
+    logger_eventletwsgi:
+      level: WARNING
+      handlers: stderr
+      qualname: eventlet.wsgi.server
+    logger_sqlalchemy:
+      level: WARNING
+      handlers: stderr
+      qualname: sqlalchemy
+    logger_boto:
+      level: WARNING
+      handlers: stderr
+      qualname: boto
+    handler_null:
+      class: logging.NullHandler
+      formatter: default
+      args: ()
+    handler_stdout:
+      class: StreamHandler
+      args: (sys.stdout,)
+      formatter: context
+    handler_stderr:
+      class: StreamHandler
+      args: (sys.stderr,)
+      formatter: context
+    formatter_context:
+      class: oslo_log.formatters.ContextFormatter
+    formatter_default:
+      format: "%(message)s"
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
@@ -410,9 +502,25 @@ secrets:
   oslo_messaging:
     admin: barbican-rabbitmq-admin
     barbican: barbican-rabbitmq-user
+  tls:
+    key_manager:
+      api:
+        public: barbican-tls-public
 
 endpoints:
   cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
   identity:
     name: keystone
     auth:
@@ -429,11 +537,11 @@ endpoints:
         username: barbican
         password: password
         project_name: service
-        user_domain_name: default
-        project_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
     hosts:
-      default: keystone-api
-      public: keystone
+      default: keystone
+      internal: keystone-api
     host_fqdn_override:
       default: null
     path:
@@ -441,10 +549,9 @@ endpoints:
     scheme:
       default: http
     port:
-      admin:
-        default: 35357
       api:
         default: 80
+        internal: 5000
   key_manager:
     name: barbican
     hosts:
@@ -453,7 +560,7 @@ endpoints:
     host_fqdn_override:
       default: null
     path:
-      default: /v1
+      default: /
     scheme:
       default: http
     port:
@@ -489,7 +596,7 @@ endpoints:
       default: rabbitmq
     host_fqdn_override:
       default: null
-    path: /
+    path: /barbican
     scheme: rabbit
     port:
       amqp:
@@ -511,6 +618,21 @@ endpoints:
     port:
       memcache:
         default: 11211
+  fluentd:
+    namespace: null
+    name: fluentd
+    hosts:
+      default: fluentd-logging
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: 'http'
+    port:
+      service:
+        default: 24224
+      metrics:
+        default: 24220
 
 manifests:
   configmap_bin: true
@@ -521,6 +643,7 @@ manifests:
   job_db_init: true
   job_db_sync: true
   job_db_drop: false
+  job_image_repo_sync: true
   job_rabbit_init: true
   job_ks_endpoints: true
   job_ks_service: true
@@ -528,6 +651,7 @@ manifests:
   pdb_api: true
   pod_test: true
   secret_db: true
+  secret_ingress_tls: true
   secret_keystone: true
   secret_rabbitmq: true
   service_ingress_api: true

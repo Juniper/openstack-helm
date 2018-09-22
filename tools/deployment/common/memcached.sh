@@ -16,12 +16,13 @@
 
 set -xe
 
-#NOTE: Pull images and lint chart
-make pull-images memcached
+#NOTE: Lint and package chart
+: ${OSH_INFRA_PATH:="../openstack-helm-infra"}
+make -C ${OSH_INFRA_PATH} memcached
 
 #NOTE: Deploy command
 : ${OSH_EXTRA_HELM_ARGS:=""}
-helm upgrade --install memcached ./memcached \
+helm upgrade --install memcached ${OSH_INFRA_PATH}/memcached \
     --namespace=openstack \
     ${OSH_EXTRA_HELM_ARGS} \
     ${OSH_EXTRA_HELM_ARGS_MEMCACHED}

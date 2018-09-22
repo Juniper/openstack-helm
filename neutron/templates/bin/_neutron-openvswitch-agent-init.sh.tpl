@@ -20,14 +20,29 @@ set -ex
 
 chown neutron: /run/openvswitch/db.sock
 
-# ensure we can talk to openvswitch or bail early
-# this is until we can setup a proper dependency
-# on deaemonsets - note that a show is not sufficient
-# here, we need to communicate with both the db and vswitchd
-# which means we need to do a create action
-#
-# see https://github.com/att-comdev/openstack-helm/issues/88
-timeout 3m neutron-sanity-check --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/openvswitch_agent.ini --ovsdb_native --nokeepalived_ipv6_support
+# FIXME(portdirect): There is a neutron bug in Queens that needs resolved
+# for now, if we cannot even get the version of neutron-sanity-check, skip
+# this validation.
+# see: https://bugs.launchpad.net/neutron/+bug/1769868
+if neutron-sanity-check --version >/dev/null 2>/dev/null; then
+  # ensure we can talk to openvswitch or bail early
+  # this is until we can setup a proper dependency
+  # on deaemonsets - note that a show is not sufficient
+  # here, we need to communicate with both the db and vswitchd
+  # which means we need to do a create action
+  #
+  # see https://github.com/att-comdev/openstack-helm/issues/88
+  timeout 3m neutron-sanity-check --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/ml2/openvswitch_agent.ini --ovsdb_native --nokeepalived_ipv6_support
+fi
+
+# handle any bridge mappings
+{{- range $bridge, $port := .Values.network.auto_bridge_add }}
+ovs-vsctl --no-wait --may-exist add-br {{ $bridge }}
+{{ if $port }}
+ovs-vsctl --no-wait --may-exist add-port {{ $bridge }} {{ $port }}
+ip link set dev {{ $port }} up
+{{ end }}
+{{- end }}
 
 # handle any bridge mappings
 {{- range $bridge, $port := .Values.network.auto_bridge_add }}
@@ -46,8 +61,13 @@ if [ -z "${tunnel_interface}" ] ; then
 fi
 
 # determine local-ip dynamically based on interface provided but only if tunnel_types is not null
-IP=$(ip a s $tunnel_interface | grep 'inet ' | awk '{print $2}' | awk -F "/" '{print $1}')
-cat <<EOF>/tmp/pod-shared/ml2-local-ip.ini
+LOCAL_IP=$(ip a s $tunnel_interface | grep 'inet ' | awk '{print $2}' | awk -F "/" '{print $1}')
+if [ -z "${LOCAL_IP}" ] ; then
+  echo "Var LOCAL_IP is empty"
+  exit 1
+fi
+
+tee > /tmp/pod-shared/ml2-local-ip.ini << EOF
 [ovs]
-local_ip = $IP
+local_ip = "${LOCAL_IP}"
 EOF

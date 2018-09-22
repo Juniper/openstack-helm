@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Default values for keystone.
+# Default values for ironic.
 # This is a YAML-formatted file.
 # Declare name/value pairs to be passed into your templates.
 # name: value
+
+release_group: null
 
 labels:
   api:
@@ -32,6 +34,7 @@ images:
   tags:
     ironic_manage_cleaning_network: docker.io/openstackhelm/heat:newton
     ironic_retrive_cleaning_network: docker.io/openstackhelm/heat:newton
+    ironic_retrive_swift_config: docker.io/openstackhelm/heat:newton
     # Bootstrap image requires curl
     bootstrap: docker.io/openstackhelm/heat:newton
     db_init: docker.io/openstackhelm/heat:newton
@@ -45,8 +48,14 @@ images:
     ironic_pxe: docker.io/openstackhelm/ironic:newton
     ironic_pxe_init: docker.io/openstackhelm/ironic:newton
     ironic_pxe_http: docker.io/nginx:1.13.3
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
+    image_repo_sync: docker.io/docker:17.07.0
   pull_policy: "IfNotPresent"
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
 
 conf:
   paste:
@@ -89,6 +98,7 @@ conf:
     }
   ironic:
     DEFAULT:
+      log_config_append: /etc/ironic/logging.conf
       enabled_drivers: agent_ipmitool
     api:
       port: null
@@ -101,7 +111,10 @@ conf:
     glance:
       auth_type: password
       swift_temp_url_duration: 86400
-      temp_url_endpoint_type: radosgw
+      temp_url_endpoint_type: swift
+      swift_container: glance
+      swift_api_version: v1
+      auth_section: glance
     inspector:
       auth_type: password
     keystone_authtoken:
@@ -109,7 +122,6 @@ conf:
       auth_version: v3
     neutron:
       auth_type: password
-      cleaning_network_uuid: null
     pxe:
       pxe_append_params: "nofb nomodeset vga=normal ipa-debug=1"
       images_path: /var/lib/openstack-helm/ironic/images
@@ -125,6 +137,64 @@ conf:
       auth_type: password
     swift:
       auth_url: null
+  logging:
+    loggers:
+      keys:
+        - root
+        - ironic
+    handlers:
+      keys:
+        - stdout
+        - stderr
+        - "null"
+    formatters:
+      keys:
+        - context
+        - default
+    logger_root:
+      level: WARNING
+      handlers: 'null'
+    logger_ironic:
+      level: INFO
+      handlers:
+        - stdout
+      qualname: ironic
+    logger_amqp:
+      level: WARNING
+      handlers: stderr
+      qualname: amqp
+    logger_amqplib:
+      level: WARNING
+      handlers: stderr
+      qualname: amqplib
+    logger_eventletwsgi:
+      level: WARNING
+      handlers: stderr
+      qualname: eventlet.wsgi.server
+    logger_sqlalchemy:
+      level: WARNING
+      handlers: stderr
+      qualname: sqlalchemy
+    logger_boto:
+      level: WARNING
+      handlers: stderr
+      qualname: boto
+    handler_null:
+      class: logging.NullHandler
+      formatter: default
+      args: ()
+    handler_stdout:
+      class: StreamHandler
+      args: (sys.stdout,)
+      formatter: context
+    handler_stderr:
+      class: StreamHandler
+      args: (sys.stderr,)
+      formatter: context
+    formatter_context:
+      class: oslo_log.formatters.ContextFormatter
+    formatter_default:
+      format: "%(message)s"
 
 network:
   pxe:
@@ -182,6 +252,14 @@ bootstrap:
       )
 
 dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - ironic-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
   static:
     api:
       jobs:
@@ -189,16 +267,16 @@ dependencies:
         - ironic-ks-user
         - ironic-ks-endpoints
         - ironic-manage-cleaning-network
+        - ironic-rabbit-init
       services:
         - endpoint: internal
           service: oslo_db
         - endpoint: internal
           service: identity
+        - endpoint: internal
+          service: oslo_messaging
     bootstrap:
-      jobs:
-        - ironic-db-sync
-        - ironic-ks-user
-        - ironic-ks-endpoints
+      jobs: null
       services:
         - endpoint: internal
           service: identity
@@ -212,6 +290,7 @@ dependencies:
         - ironic-ks-user
         - ironic-ks-endpoints
         - ironic-manage-cleaning-network
+        - ironic-rabbit-init
       services:
         - endpoint: internal
           service: oslo_db
@@ -219,6 +298,8 @@ dependencies:
           service: identity
         - endpoint: internal
           service: baremetal
+        - endpoint: internal
+          service: oslo_messaging
     db_init:
       services:
         - endpoint: internal
@@ -245,18 +326,23 @@ dependencies:
           service: identity
     rabbit_init:
       services:
-      - service: oslo_messaging
-        endpoint: internal
+      - endpoint: internal
+        service: oslo_messaging
     manage_cleaning_network:
       services:
         - endpoint: internal
           service: network
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
   identity:
     admin: ironic-keystone-admin
     ironic: ironic-keystone-user
+    glance: ironic-glance-keystone-user
   oslo_db:
     admin: ironic-db-admin
     ironic: ironic-db-user
@@ -269,6 +355,18 @@ secrets:
 # required by this chart
 endpoints:
   cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
   identity:
     name: keystone
     auth:
@@ -279,17 +377,25 @@ endpoints:
         project_name: admin
         user_domain_name: default
         project_domain_name: default
+      glance:
+        role: admin
+        region_name: RegionOne
+        username: glance
+        password: password
+        project_name: service
+        user_domain_name: service
+        project_domain_name: service
       ironic:
         role: admin
         region_name: RegionOne
         username: ironic
         password: password
         project_name: service
-        user_domain_name: default
-        project_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
     hosts:
-      default: keystone-api
-      public: keystone
+      default: keystone
+      internal: keystone-api
     host_fqdn_override:
       default: null
     path:
@@ -297,10 +403,9 @@ endpoints:
     scheme:
       default: http
     port:
-      admin:
-        default: 35357
       api:
         default: 80
+        internal: 5000
   baremetal:
     name: ironic
     hosts:
@@ -333,23 +438,6 @@ endpoints:
       api:
         default: 9292
         public: 80
-  ceph_object_store:
-    name: radosgw
-    namespace: ceph
-    auth:
-      glance:
-        tmpurlkey: supersecret
-    hosts:
-      default: ceph-rgw
-    host_fqdn_override:
-      default: null
-    path:
-      default: /auth/v1.0
-    scheme:
-      default: http
-    port:
-      api:
-        default: 8088
   oslo_db:
     auth:
       admin:
@@ -394,7 +482,7 @@ endpoints:
       default: rabbitmq
     host_fqdn_override:
       default: null
-    path: /
+    path: /ironic
     scheme: rabbit
     port:
       amqp:
@@ -416,6 +504,38 @@ endpoints:
       api:
         default: 9696
         public: 80
+  object_store:
+    name: swift
+    namespace: ceph
+    auth:
+      glance:
+        tmpurlkey: supersecret
+    hosts:
+      default: ceph-rgw
+    host_fqdn_override:
+      default: null
+    path:
+      default: /swift/v1/KEY_$(tenant_id)s
+    scheme:
+      default: http
+    port:
+      api:
+        default: 8088
+  fluentd:
+    namespace: null
+    name: fluentd
+    hosts:
+      default: fluentd-logging
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: 'http'
+    port:
+      service:
+        default: 24224
+      metrics:
+        default: 24220
 
 pod:
   affinity:
@@ -524,6 +644,13 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
 
 manifests:
   configmap_bin: true
@@ -534,6 +661,7 @@ manifests:
   job_db_drop: false
   job_db_init: true
   job_db_sync: true
+  job_image_repo_sync: true
   job_ks_endpoints: true
   job_ks_service: true
   job_ks_user: true

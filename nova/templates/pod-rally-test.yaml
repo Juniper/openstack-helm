@@ -16,30 +16,31 @@ limitations under the License.
 
 {{- if .Values.manifests.pod_rally_test }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.tests }}
 
 {{- $mounts_tests := .Values.pod.mounts.nova_tests.nova_tests }}
 {{- $mounts_tests_init := .Values.pod.mounts.nova_tests.init_container }}
 
 {{- $serviceAccountName := print $envAll.Release.Name "-test" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "tests" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: v1
 kind: Pod
 metadata:
   name: {{ print $envAll.Release.Name "-test" }}
+  labels:
+{{ tuple $envAll "nova" "test" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
   annotations:
     "helm.sh/hook": test-success
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
 spec:
   nodeSelector:
     {{ .Values.labels.test.node_selector_key }}: {{ .Values.labels.test.node_selector_value }}
   restartPolicy: Never
   serviceAccountName: {{ $serviceAccountName }}
   initContainers:
-{{ tuple $envAll $dependencies $mounts_tests_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 4 }}
+{{ tuple $envAll "tests" $mounts_tests_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 4 }}
     - name: {{ .Release.Name }}-test-ks-user
-      image: {{ .Values.images.tags.ks_user }}
-      imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "ks_user" | include "helm-toolkit.snippets.image" | indent 6 }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.ks_user | include "helm-toolkit.snippets.kubernetes_resources" | indent 6 }}
       command:
         - /tmp/ks-user.sh
@@ -61,8 +62,7 @@ spec:
           value: {{ .Values.endpoints.identity.auth.test.role | quote }}
   containers:
     - name: {{ .Release.Name }}-test
-      image: {{ .Values.images.tags.test }}
-      imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "test" | include "helm-toolkit.snippets.image" | indent 6 }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.tests | include "helm-toolkit.snippets.kubernetes_resources" | indent 6 }}
       env:
 {{- with $env := dict "ksUserSecret" .Values.secrets.identity.admin }}
@@ -89,8 +89,8 @@ spec:
 {{ if $mounts_tests.volumeMounts }}{{ toYaml $mounts_tests.volumeMounts | indent 8 }}{{ end }}
   volumes:
     - name: nova-etc
-      configMap:
-        name: nova-etc
+      secret:
+        secretName: nova-etc
         defaultMode: 0444
     - name: nova-bin
       configMap:

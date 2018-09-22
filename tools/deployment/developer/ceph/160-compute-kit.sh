@@ -15,9 +15,9 @@
 #    under the License.
 set -xe
 
-#NOTE: Pull images and lint chart
-make pull-images nova
-make pull-images neutron
+#NOTE: Lint and package chart
+make nova
+make neutron
 
 #NOTE: Deploy nova
 : ${OSH_EXTRA_HELM_ARGS:=""}
@@ -32,6 +32,7 @@ else
   helm upgrade --install nova ./nova \
       --namespace=openstack \
       --set conf.nova.libvirt.virt_type=qemu \
+      --set conf.nova.libvirt.cpu_mode=none \
       ${OSH_EXTRA_HELM_ARGS} \
       ${OSH_EXTRA_HELM_ARGS_NOVA}
 fi
@@ -77,5 +78,5 @@ helm upgrade --install neutron ./neutron \
 export OS_CLOUD=openstack_helm
 openstack service list
 sleep 30 #NOTE(portdirect): Wait for ingress controller to update rules and restart Nginx
-openstack hypervisor list
+openstack compute service list
 openstack network agent list

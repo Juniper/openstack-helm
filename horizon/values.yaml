@@ -23,8 +23,14 @@ images:
     horizon_db_sync: docker.io/openstackhelm/horizon:newton
     db_drop: docker.io/openstackhelm/heat:newton
     horizon: docker.io/openstackhelm/horizon:newton
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
+    image_repo_sync: docker.io/docker:17.07.0
   pull_policy: "IfNotPresent"
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
 
 release_group: null
 
@@ -282,9 +288,8 @@ conf:
         #    ('http://cluster2.example.com:5000/v2.0', 'cluster2'),
         #]
 
-        OPENSTACK_KEYSTONE_URL = "{{ tuple "identity" "public" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" }}"
-        OPENSTACK_KEYSTONE_DEFAULT_ROLE = "_member_"
-
+        OPENSTACK_KEYSTONE_URL = "{{ tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" }}"
+        OPENSTACK_KEYSTONE_DEFAULT_ROLE = "member"
 
         {{- if .Values.conf.horizon.local_settings.config.auth.sso.enabled }}
         # Enables keystone web single-sign-on if set to True.
@@ -438,7 +443,7 @@ conf:
         # OPENSTACK_ENDPOINT_TYPE specifies the endpoint type to use for the endpoints
         # in the Keystone service catalog. Use this setting when Horizon is running
         # external to the OpenStack environment. The default is 'publicURL'.
-        OPENSTACK_ENDPOINT_TYPE = "publicURL"
+        OPENSTACK_ENDPOINT_TYPE = "internalURL"
 
         # SECONDARY_ENDPOINT_TYPE specifies the fallback endpoint type to use in the
         # case that OPENSTACK_ENDPOINT_TYPE is not present in the endpoints
@@ -527,7 +532,7 @@ conf:
             'handlers': {
                 'null': {
                     'level': 'DEBUG',
-                    'class': 'django.utils.log.NullHandler',
+                    'class': 'logging.NullHandler',
                 },
                 'console': {
                     # Set the level to "DEBUG" for verbose output logging.
@@ -1856,6 +1861,14 @@ conf:
         'os_compute_api:servers:update': 'rule:admin_or_owner'
 
 dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - horizon-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
   static:
     dashboard:
       jobs:
@@ -1879,6 +1892,10 @@ dependencies:
       services:
         - endpoint: internal
           service: oslo_db
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
 
 pod:
   affinity:
@@ -1944,23 +1961,46 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
   oslo_db:
     admin: horizon-db-admin
     horizon: horizon-db-user
+  tls:
+    dashboard:
+      dashboard:
+        public: horizon-tls-public
 
 # typically overridden by environmental
 # values, but should include all endpoints
 # required by this chart
 endpoints:
   cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
   identity:
     name: keystone
     hosts:
-      default: keystone-api
-      public: keystone
+      default: keystone
+      internal: keystone-api
     host_fqdn_override:
       default: null
     path:
@@ -1968,10 +2008,9 @@ endpoints:
     scheme:
       default: http
     port:
-      admin:
-        default: 35357
       api:
         default: 80
+        internal: 5000
   oslo_cache:
     hosts:
       default: memcached
@@ -1987,6 +2026,13 @@ endpoints:
       public: horizon
     host_fqdn_override:
       default: null
+      # NOTE(portdirect): this chart supports TLS for fqdn over-ridden public
+      # endpoints using the following format:
+      # public:
+      #   host: null
+      #   tls:
+      #     crt: null
+      #     key: null
     path:
       default: null
     scheme:
@@ -2020,7 +2066,9 @@ manifests:
   job_db_init: true
   job_db_sync: true
   job_db_drop: false
+  job_image_repo_sync: true
   pdb: true
   secret_db: true
+  secret_ingress_tls: true
   service_ingress: true
   service: true

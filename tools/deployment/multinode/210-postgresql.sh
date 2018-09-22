@@ -23,8 +23,9 @@ else
 fi
 
 #NOTE: Wait for deploy
-helm upgrade --install postgresql ./postgresql \
-  --namespace=openstack $values \
+: ${OSH_INFRA_PATH:="../openstack-helm-infra"}
+helm upgrade --install postgresql ${OSH_INFRA_PATH}/postgresql \
+  --namespace=openstack \
   ${OSH_EXTRA_HELM_ARGS} \
   ${OSH_EXTRA_HELM_ARGS_POSTGRESQL}
 

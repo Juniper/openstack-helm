@@ -23,6 +23,10 @@ kind: ConfigMap
 metadata:
   name: keystone-bin
 data:
+{{- if .Values.images.local_registry.active }}
+  image-repo-sync.sh: |
+{{- include "helm-toolkit.scripts.image_repo_sync" . | indent 4 }}
+{{- end }}
 {{- if .Values.bootstrap.enabled }}
   bootstrap.sh: |
 {{ tuple "bin/_bootstrap.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
@@ -39,6 +43,8 @@ data:
 {{- include "helm-toolkit.scripts.db_drop" . | indent 4 }}
   keystone-api.sh: |
 {{ tuple "bin/_keystone-api.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  endpoint-update.py: |
+{{ tuple "bin/_endpoint-update.py.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   fernet-manage.py: |
 {{ tuple "bin/_fernet-manage.py.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   domain-manage-init.sh: |

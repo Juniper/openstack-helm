@@ -16,15 +16,16 @@ limitations under the License.
 
 {{- if .Values.manifests.job_ks_endpoints }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.ks_endpoints }}
 
 {{- $serviceAccountName := "rally-ks-endpoints" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "ks_endpoints" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: rally-ks-endpoints
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
 spec:
   template:
     metadata:
@@ -36,13 +37,12 @@ spec:
       nodeSelector:
         {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "ks_endpoints" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
 {{- range $key1, $osServiceType := tuple "benchmark" }}
 {{- range $key2, $osServiceEndPoint := tuple "admin" "internal" "public" }}
         - name: {{ $osServiceType }}-ks-endpoints-{{ $osServiceEndPoint }}
-          image: {{ $envAll.Values.images.tags.ks_endpoints }}
-          imagePullPolicy: {{ $envAll.Values.images.pull_policy }}
+{{ tuple $envAll "ks_endpoints" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.ks_endpoints | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           command:
             - /tmp/ks-endpoints.sh

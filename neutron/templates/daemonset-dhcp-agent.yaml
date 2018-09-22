@@ -18,19 +18,25 @@ limitations under the License.
 {{- $daemonset := index . 0 }}
 {{- $configMapName := index . 1 }}
 {{- $serviceAccountName := index . 2 }}
-{{- $dependencies := index . 3 }}
-{{- $envAll := index . 4 }}
+{{- $envAll := index . 3 }}
 {{- with $envAll }}
 
 {{- $mounts_neutron_dhcp_agent := .Values.pod.mounts.neutron_dhcp_agent.neutron_dhcp_agent }}
 {{- $mounts_neutron_dhcp_agent_init := .Values.pod.mounts.neutron_dhcp_agent.init_container }}
 
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: neutron-dhcp-agent
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "neutron" "dhcp-agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
+  selector:
+    matchLabels:
+{{ tuple $envAll "neutron" "dhcp-agent" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
 {{ tuple $envAll "dhcp_agent" | include "helm-toolkit.snippets.kubernetes_upgrades_daemonset" | indent 2 }}
   template:
     metadata:
@@ -45,12 +51,16 @@ spec:
         {{ .Values.labels.agent.dhcp.node_selector_key }}: {{ .Values.labels.agent.dhcp.node_selector_value }}
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
+      {{- if or ( gt .Capabilities.KubeVersion.Major "1" ) ( ge .Capabilities.KubeVersion.Minor "10" ) }}
+      shareProcessNamespace: true
+      {{- else }}
+      hostPID: true
+      {{- end }}
       initContainers:
-{{ tuple $envAll $dependencies $mounts_neutron_dhcp_agent_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "pod_dependency" $mounts_neutron_dhcp_agent_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: neutron-dhcp-agent
-          image: {{ .Values.images.tags.neutron_dhcp }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "neutron_dhcp" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.agent.dhcp | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           securityContext:
             runAsUser: {{ .Values.pod.user.neutron.uid }}
@@ -67,6 +77,10 @@ spec:
               subPath: neutron.conf
               readOnly: true
             - name: neutron-etc
+              mountPath: {{ .Values.conf.neutron.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.neutron.DEFAULT.log_config_append }}
+              readOnly: true
+            - name: neutron-etc
               mountPath: /etc/neutron/plugins/ml2/ml2_conf.ini
               subPath: ml2_conf.ini
               readOnly: true
@@ -75,8 +89,6 @@ spec:
               mountPath: /etc/neutron/plugins/ml2/openvswitch_agent.ini
               subPath: openvswitch_agent.ini
               readOnly: true
-            - name: runopenvswitch
-              mountPath: /run/openvswitch
             {{- end }}
             - name: neutron-etc
               mountPath: /etc/neutron/dhcp_agent.ini
@@ -113,6 +125,11 @@ spec:
             {{- end }}
             - name: socket
               mountPath: /var/lib/neutron/openstack-helm
+            {{- if .Values.network.share_namespaces }}
+            - name: host-run-netns
+              mountPath: /run/netns
+              mountPropagation: Bidirectional
+            {{- end }}
 {{ if $mounts_neutron_dhcp_agent.volumeMounts }}{{ toYaml $mounts_neutron_dhcp_agent.volumeMounts | indent 12 }}{{ end }}
       volumes:
         - name: neutron-bin
@@ -120,17 +137,17 @@ spec:
             name: neutron-bin
             defaultMode: 0555
         - name: neutron-etc
-          configMap:
-            name: {{ $configMapName }}
+          secret:
+            secretName: {{ $configMapName }}
             defaultMode: 0444
-        {{- if ( has "openvswitch" .Values.network.backend ) }}
-        - name: runopenvswitch
-          hostPath:
-            path: /run/openvswitch
-        {{- end }}
         - name: socket
           hostPath:
             path: /var/lib/neutron/openstack-helm
+        {{- if .Values.network.share_namespaces }}
+        - name: host-run-netns
+          hostPath:
+            path: /run/netns
+        {{- end }}
 {{ if $mounts_neutron_dhcp_agent.volumes }}{{ toYaml $mounts_neutron_dhcp_agent.volumes | indent 8 }}{{ end }}
 {{- end }}
 {{- end }}
@@ -141,9 +158,9 @@ spec:
 {{- $configMapName := "neutron-etc" }}
 {{- $serviceAccountName := "neutron-dhcp-agent" }}
 {{- $dependencyOpts := dict "envAll" $envAll "dependencyMixinParam" $envAll.Values.network.backend "dependencyKey" "dhcp" -}}
-{{- $dependencies := include "helm-toolkit.utils.dependency_resolver" $dependencyOpts | toString | fromYaml }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
-{{- $daemonset_yaml := list $daemonset $configMapName $serviceAccountName $dependencies . | include "neutron.dhcp_agent.daemonset" | toString | fromYaml }}
+{{- $_ := include "helm-toolkit.utils.dependency_resolver" $dependencyOpts | toString | fromYaml }}
+{{ tuple $envAll "pod_dependency" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{- $daemonset_yaml := list $daemonset $configMapName $serviceAccountName . | include "neutron.dhcp_agent.daemonset" | toString | fromYaml }}
 {{- $configmap_yaml := "neutron.configmap.etc" }}
 {{- list $daemonset $daemonset_yaml $configmap_yaml $configMapName . | include "helm-toolkit.utils.daemonset_overrides" }}
 {{- end }}

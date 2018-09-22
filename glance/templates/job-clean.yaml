@@ -17,12 +17,11 @@ limitations under the License.
 {{- if .Values.manifests.job_clean }}
 {{- $envAll := . }}
 {{- if .Values.bootstrap.enabled }}
-{{- $dependencies := .Values.dependencies.static.clean }}
 
 {{- $randStringSuffix := randAlphaNum 5 | lower }}
 
 {{- $serviceAccountName := print "glance-clean-" $randStringSuffix }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "clean" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: Role
@@ -57,6 +56,7 @@ metadata:
   annotations:
     "helm.sh/hook": pre-delete
     "helm.sh/hook-delete-policy": hook-succeeded
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
 spec:
   template:
     metadata:
@@ -68,12 +68,11 @@ spec:
       nodeSelector:
         {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "clean" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         {{- if eq .Values.storage "rbd" }}
         - name: glance-secret-clean
-          image: {{ .Values.images.tags.glance_storage_init }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "glance_storage_init" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.bootstrap | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           env:
             - name: NAMESPACE
@@ -91,8 +90,7 @@ spec:
               readOnly: true
         {{ end }}
         - name: glance-image-clean
-          image: {{ .Values.images.tags.bootstrap }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "bootstrap" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.bootstrap | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           env:
 {{- with $env := dict "ksUserSecret" .Values.secrets.identity.admin }}

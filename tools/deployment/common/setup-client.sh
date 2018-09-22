@@ -16,15 +16,8 @@
 
 set -xe
 
-# Remove packages not installed by pip
-os_distr=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr "[:upper:]" "[:lower:]")
-if [[ $os_distr = *"centos"* ]];then
-  sudo -H yum remove -y python-yaml
-elif [[ $os_distr = *"ubuntu"* ]];then
-  sudo -H apt-get --purge remove python-yaml -y
-fi
-
-sudo -H -E pip install python-openstackclient python-heatclient
+sudo -H -E pip install "cmd2<=0.8.7"
+sudo -H -E pip install python-openstackclient python-heatclient --ignore-installed
 
 sudo -H mkdir -p /etc/openstack
 sudo -H chown -R $(id -un): /etc/openstack

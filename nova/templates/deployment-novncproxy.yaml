@@ -16,20 +16,26 @@ limitations under the License.
 
 {{- if and .Values.manifests.deployment_novncproxy ( eq .Values.console.console_kind "novnc" )}}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.novncproxy }}
 
 {{- $mounts_nova_novncproxy := .Values.pod.mounts.nova_novncproxy.nova_novncproxy }}
 {{- $mounts_nova_novncproxy_init := .Values.pod.mounts.nova_novncproxy.init_novncproxy }}
 
 {{- $serviceAccountName := "nova-novncproxy" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "novncproxy" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nova-novncproxy
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "nova" "novnc-proxy" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
   replicas: {{ .Values.pod.replicas.novncproxy }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "nova" "novnc-proxy" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
 {{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
   template:
     metadata:
@@ -47,10 +53,9 @@ spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       initContainers:
-{{ tuple $envAll $dependencies $mounts_nova_novncproxy_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "novncproxy" $mounts_nova_novncproxy_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
         - name: nova-novncproxy-init
-          image: {{ .Values.images.tags.nova_novncproxy }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "nova_novncproxy" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.novncproxy | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           securityContext:
             runAsUser: {{ .Values.pod.user.nova.uid }}
@@ -65,11 +70,14 @@ spec:
               mountPath: /etc/nova/nova.conf
               subPath: nova.conf
               readOnly: true
+            - name: nova-etc
+              mountPath: {{ .Values.conf.nova.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.nova.DEFAULT.log_config_append }}
+              readOnly: true
             - name: pod-shared
               mountPath: /tmp/pod-shared
         - name: nova-novncproxy-init-assets
-          image: {{ .Values.images.tags.nova_novncproxy_assets }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "nova_novncproxy_assets" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.novncproxy | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           command:
             - /tmp/nova-console-proxy-init-assets.sh
@@ -82,8 +90,7 @@ spec:
               mountPath: /tmp/usr/share/novnc
       containers:
         - name: nova-novncproxy
-          image: {{ .Values.images.tags.nova_novncproxy }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "nova_novncproxy" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.novncproxy | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           command:
             - /tmp/nova-console-proxy.sh
@@ -99,6 +106,10 @@ spec:
               mountPath: /etc/nova/nova.conf
               subPath: nova.conf
               readOnly: true
+            - name: nova-etc
+              mountPath: /etc/nova/logging.conf
+              subPath: logging.conf
+              readOnly: true
             - name: pod-usr-share-novnc
               mountPath: /usr/share/novnc
               readOnly: true
@@ -111,8 +122,8 @@ spec:
             name: nova-bin
             defaultMode: 0555
         - name: nova-etc
-          configMap:
-            name: nova-etc
+          secret:
+            secretName: nova-etc
             defaultMode: 0444
         - name: pod-usr-share-novnc
           emptyDir: {}

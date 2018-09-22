@@ -7,24 +7,6 @@ data:
   chart_name: helm-toolkit
   release: helm-toolkit
   namespace: helm-toolkit
-  timeout: 300
-  values: {}
-  source:
-    type: local
-    location: ${OSH_PATH}
-    subpath: helm-toolkit
-    reference: master
-  dependencies: []
----
-schema: armada/Chart/v1
-metadata:
-  schema: metadata/Document/v1
-  name: osh-infra-helm-toolkit
-data:
-  chart_name: osh-infra-helm-toolkit
-  release: osh-infra-helm-toolkit
-  namespace: helm-toolkit
-  timeout: 300
   values: {}
   source:
     type: local
@@ -41,11 +23,19 @@ data:
   chart_name: openstack-ingress-controller
   release: openstack-ingress-controller
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-openstack-ingress-controller
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
+    pre:
+      delete:
+        - type: job
+          labels:
+            release_group: osh-openstack-ingress-controller
   values:
     labels:
       server:
@@ -60,7 +50,7 @@ data:
         ingress: 2
   source:
     type: local
-    location: ${OSH_PATH}
+    location: ${OSH_INFRA_PATH}
     subpath: ingress
     reference: master
   dependencies:
@@ -74,17 +64,19 @@ data:
   chart_name: openstack-ceph-config
   release: openstack-ceph-config
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-openstack-ceph-config
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
     pre:
       delete:
         - type: job
           labels:
-            application: ceph
-            component: namespace-client-key-generator
+            release_group: osh-openstack-ceph-config
   values:
     labels:
       jobs:
@@ -110,17 +102,12 @@ data:
     bootstrap:
       enabled: false
     conf:
-      ceph:
-        global:
-          #NOTE (portdirect): any uuidv4 value is acceptable here, though must
-          # be consistent if you wish to redploy whist maintaining data.
-          fsid: C1150D08-707D-4FEB-85E7-692BD9206DC3
       rgw_ks:
         enabled: true
   source:
     type: local
-    location: ${OSH_PATH}
-    subpath: ceph
+    location: ${OSH_INFRA_PATH}
+    subpath: ceph-provisioners
     reference: master
   dependencies:
     - helm-toolkit
@@ -133,14 +120,20 @@ data:
   chart_name: mariadb
   release: mariadb
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-mariadb
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
+    pre:
+      delete:
+        - type: job
+          labels:
+            release_group: osh-mariadb
   values:
-    volume:
-      enabled: false
     endpoints:
       oslo_db:
         auth:
@@ -148,7 +141,7 @@ data:
             password: ${DB_ADMIN_PASSWORD}
     monitoring:
       prometheus:
-        enabled: true
+        enabled: True
     labels:
       server:
         node_selector_key: openstack-control-plane
@@ -158,7 +151,7 @@ data:
         node_selector_value: enabled
   source:
     type: local
-    location: ${OSH_PATH}
+    location: ${OSH_INFRA_PATH}
     subpath: mariadb
     reference: master
   dependencies:
@@ -172,19 +165,33 @@ data:
   chart_name: memcached
   release: memcached
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-memcached
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
+    pre:
+      delete:
+        - type: job
+          labels:
+            release_group: osh-memcached
   values:
     labels:
       server:
         node_selector_key: openstack-control-plane
         node_selector_value: enabled
+      prometheus_memcached_exporter:
+        node_selector_key: openstack-control-plane
+        node_selector_value: enabled
+    monitoring:
+      prometheus:
+        enabled: true
   source:
     type: local
-    location: ${OSH_PATH}
+    location: ${OSH_INFRA_PATH}
     subpath: memcached
     reference: master
   dependencies:
@@ -198,11 +205,25 @@ data:
   chart_name: keystone-rabbitmq
   release: keystone-rabbitmq
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-keystone-rabbitmq
+  test:
+    enabled: true
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
+    pre:
+      delete:
+        - type: job
+          labels:
+            release_group: osh-keystone-rabbitmq
+        - type: pod
+          labels:
+            release_group: osh-keystone-rabbitmq
+            component: test
   values:
     endpoints:
       oslo_messaging:
@@ -217,7 +238,7 @@ data:
           default: keystone-rabbitmq-exporter
     monitoring:
       prometheus:
-        enabled: true
+        enabled: True
     labels:
       server:
         node_selector_key: openstack-control-plane
@@ -227,7 +248,7 @@ data:
         node_selector_value: enabled
   source:
     type: local
-    location: ${OSH_PATH}
+    location: ${OSH_INFRA_PATH}
     subpath: rabbitmq
     reference: master
   dependencies:
@@ -241,37 +262,25 @@ data:
   chart_name: keystone
   release: keystone
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-keystone
+  test:
+    enabled: true
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
     pre:
       delete:
         - type: job
           labels:
-            application: keystone
-            component: bootstrap
-        - type: job
+            release_group: osh-keystone
+        - type: pod
           labels:
-            application: keystone
-            component: credential-setup
-        - type: job
-          labels:
-            application: keystone
-            component: db-init
-        - type: job
-          labels:
-            application: keystone
-            component: db-sync
-        - type: job
-          labels:
-            application: keystone
-            component: fernet-setup
-        - type: job
-          labels:
-            application: keystone
-            component: domain-manage
+            release_group: osh-keystone
+            component: test
   values:
     endpoints:
       identity:
@@ -325,25 +334,19 @@ data:
   chart_name: radosgw-openstack
   release: radosgw-openstack
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-radosgw-openstack
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
     pre:
       delete:
         - type: job
           labels:
-            application: ceph
-            component: ks-user
-        - type: job
-          labels:
-            application: ceph
-            component: ks-service
-        - type: job
-          labels:
-            application: ceph
-            component: ks-endpoints
+            release_group: osh-radosgw-openstack
   values:
     endpoints:
       identity:
@@ -354,11 +357,11 @@ data:
           swift:
             password: ${SWIFT_USER_PASSWORD}
           object_store:
-            namespace: ceph
+            namespace: openstack
           ceph_mon:
             namespace: ceph
       object_store:
-        namespace: ceph
+        namespace: openstack
       ceph_mon:
         namespace: ceph
     labels:
@@ -366,24 +369,24 @@ data:
         node_selector_key: openstack-control-plane
         node_selector_value: enabled
     bootstrap:
-      enabled: false
+      enabled: False
     conf:
       rgw_ks:
-        enabled: true
+        enabled: True
     network:
       public: ${CEPH_NETWORK}
       cluster: ${CEPH_NETWORK}
     deployment:
-      storage_secrets: false
-      ceph: false
-      rbd_provisioner: false
-      cephfs_provisioner: false
-      client_secrets: false
-      rgw_keystone_user_and_endpoints: true
+      storage_secrets: False
+      ceph: True
+      rbd_provisioner: False
+      cephfs_provisioner: False
+      client_secrets: False
+      rgw_keystone_user_and_endpoints: True
   source:
     type: local
-    location: ${OSH_PATH}
-    subpath: ceph
+    location: ${OSH_INFRA_PATH}
+    subpath: ceph-rgw
     reference: master
   dependencies:
     - helm-toolkit
@@ -396,11 +399,25 @@ data:
   chart_name: glance-rabbitmq
   release: glance-rabbitmq
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-glance-rabbitmq
+  test:
+    enabled: true
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
+    pre:
+      delete:
+        - type: job
+          labels:
+            release_group: osh-glance-rabbitmq
+        - type: pod
+          labels:
+            release_group: osh-glance-rabbitmq
+            component: test
   values:
     endpoints:
       oslo_messaging:
@@ -415,7 +432,7 @@ data:
           default: glance-rabbitmq-exporter
     monitoring:
       prometheus:
-        enabled: true
+        enabled: True
     labels:
       server:
         node_selector_key: openstack-control-plane
@@ -425,7 +442,7 @@ data:
         node_selector_value: enabled
   source:
     type: local
-    location: ${OSH_PATH}
+    location: ${OSH_INFRA_PATH}
     subpath: rabbitmq
     reference: master
   dependencies:
@@ -439,37 +456,25 @@ data:
   chart_name: glance
   release: glance
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-glance
+  test:
+    enabled: true
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
     pre:
       delete:
         - type: job
           labels:
-            application: glance
-            component: db-init
-        - type: job
+            release_group: osh-glance
+        - type: pod
           labels:
-            application: glance
-            component: db-sync
-        - type: job
-          labels:
-            application: glance
-            component: ks-user
-        - type: job
-          labels:
-            application: glance
-            component: ks-service
-        - type: job
-          labels:
-            application: glance
-            component: ks-endpoints
-        - type: job
-          labels:
-            application: glance
-            component: storage-init
+            release_group: osh-glance
+            component: test
   values:
     endpoints:
       identity:
@@ -511,7 +516,17 @@ data:
       replicas:
         api: 2
         registry: 2
-    storage: radosgw
+    # NOTE(portdirect): glance APIv1 is required for heat in Newton
+    conf:
+      glance:
+        DEFAULT:
+          enable_v1_api: true
+          enable_v2_registry: true
+    manifests:
+      deployment_registry: true
+      ingress_registry: true
+      pdb_registry: true
+      service_ingress_registry: true
   source:
     type: local
     location: ${OSH_PATH}
@@ -528,11 +543,25 @@ data:
   chart_name: cinder-rabbitmq
   release: cinder-rabbitmq
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-cinder-rabbitmq
+  test:
+    enabled: true
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
+    pre:
+      delete:
+        - type: job
+          labels:
+            release_group: osh-cinder-rabbitmq
+        - type: pod
+          labels:
+            release_group: osh-cinder-rabbitmq
+            component: test
   values:
     endpoints:
       oslo_messaging:
@@ -547,7 +576,7 @@ data:
           default: cinder-rabbitmq-exporter
     monitoring:
       prometheus:
-        enabled: true
+        enabled: True
     labels:
       server:
         node_selector_key: openstack-control-plane
@@ -557,7 +586,7 @@ data:
         node_selector_value: enabled
   source:
     type: local
-    location: ${OSH_PATH}
+    location: ${OSH_INFRA_PATH}
     subpath: rabbitmq
     reference: master
   dependencies:
@@ -571,37 +600,25 @@ data:
   chart_name: cinder
   release: cinder
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-cinder
+  test:
+    enabled: true
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
     pre:
       delete:
         - type: job
           labels:
-            application: cinder
-            component: db-init
-        - type: job
+            release_group: osh-cinder
+        - type: pod
           labels:
-            application: cinder
-            component: db-sync
-        - type: job
-          labels:
-            application: cinder
-            component: ks-user
-        - type: job
-          labels:
-            application: cinder
-            component: ks-service
-        - type: job
-          labels:
-            application: cinder
-            component: ks-endpoints
-        - type: job
-          labels:
-            application: cinder
-            component: storage-init
+            release_group: osh-cinder
+            component: test
   values:
     endpoints:
       identity:
@@ -671,11 +688,19 @@ data:
   chart_name: openvswitch
   release: openvswitch
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-openvswitch
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
+    pre:
+      delete:
+        - type: job
+          labels:
+            release_group: osh-openvswitch
   values:
     labels:
       ovs:
@@ -683,7 +708,7 @@ data:
         node_selector_value: enabled
   source:
     type: local
-    location: ${OSH_PATH}
+    location: ${OSH_INFRA_PATH}
     subpath: openvswitch
     reference: master
   dependencies:
@@ -697,11 +722,13 @@ data:
   chart_name: libvirt
   release: libvirt
   namespace: openstack
-  timeout: 1800
+  wait:
+    labels:
+      release_group: osh-libvirt
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
   values:
     labels:
       agent:
@@ -710,7 +737,7 @@ data:
           node_selector_value: enabled
   source:
     type: local
-    location: ${OSH_PATH}
+    location: ${OSH_INFRA_PATH}
     subpath: libvirt
     reference: master
   dependencies:
@@ -724,11 +751,25 @@ data:
   chart_name: nova-rabbitmq
   release: nova-rabbitmq
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-nova-rabbitmq
+  test:
+    enabled: true
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
+    pre:
+      delete:
+        - type: job
+          labels:
+            release_group: osh-nova-rabbitmq
+        - type: pod
+          labels:
+            release_group: osh-nova-rabbitmq
+            component: test
   values:
     endpoints:
       oslo_messaging:
@@ -743,7 +784,7 @@ data:
           default: nova-rabbitmq-exporter
     monitoring:
       prometheus:
-        enabled: true
+        enabled: True
     labels:
       server:
         node_selector_key: openstack-control-plane
@@ -753,7 +794,7 @@ data:
         node_selector_value: enabled
   source:
     type: local
-    location: ${OSH_PATH}
+    location: ${OSH_INFRA_PATH}
     subpath: rabbitmq
     reference: master
   dependencies:
@@ -767,11 +808,13 @@ data:
   chart_name: nova
   release: nova
   namespace: openstack
-  timeout: 1800
+  wait:
+    labels:
+      release_group: osh-nova
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
     pre:
       delete:
         - type: job
@@ -905,6 +948,7 @@ data:
       nova:
         libvirt:
           virt_type: qemu
+          cpu_mode: none
   source:
     type: local
     location: ${OSH_PATH}
@@ -921,11 +965,25 @@ data:
   chart_name: neutron-rabbitmq
   release: neutron-rabbitmq
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-neutron-rabbitmq
+  test:
+    enabled: true
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
+    pre:
+      delete:
+        - type: job
+          labels:
+            release_group: osh-neutron-rabbitmq
+        - type: pod
+          labels:
+            release_group: osh-neutron-rabbitmq
+            component: test
   values:
     endpoints:
       oslo_messaging:
@@ -940,7 +998,7 @@ data:
           default: neutron-rabbitmq-exporter
     monitoring:
       prometheus:
-        enabled: true
+        enabled: True
     labels:
       server:
         node_selector_key: openstack-control-plane
@@ -950,7 +1008,7 @@ data:
         node_selector_value: enabled
   source:
     type: local
-    location: ${OSH_PATH}
+    location: ${OSH_INFRA_PATH}
     subpath: rabbitmq
     reference: master
   dependencies:
@@ -964,11 +1022,13 @@ data:
   chart_name: neutron
   release: neutron
   namespace: openstack
-  timeout: 1800
+  wait:
+    labels:
+      release_group: osh-neutron
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
     pre:
       delete:
         - type: job
@@ -1089,11 +1149,25 @@ data:
   chart_name: heat-rabbitmq
   release: heat-rabbitmq
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-heat-rabbitmq
+  test:
+    enabled: true
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
+    pre:
+      delete:
+        - type: job
+          labels:
+            release_group: osh-heat-rabbitmq
+        - type: pod
+          labels:
+            release_group: osh-heat-rabbitmq
+            component: test
   values:
     endpoints:
       oslo_messaging:
@@ -1108,7 +1182,7 @@ data:
           default: heat-rabbitmq-exporter
     monitoring:
       prometheus:
-        enabled: true
+        enabled: True
     labels:
       server:
         node_selector_key: openstack-control-plane
@@ -1118,7 +1192,7 @@ data:
         node_selector_value: enabled
   source:
     type: local
-    location: ${OSH_PATH}
+    location: ${OSH_INFRA_PATH}
     subpath: rabbitmq
     reference: master
   dependencies:
@@ -1132,33 +1206,25 @@ data:
   chart_name: heat
   release: heat
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-heat
+  test:
+    enabled: true
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
     pre:
       delete:
         - type: job
           labels:
-            application: heat
-            component: db-init
-        - type: job
+            release_group: osh-heat
+        - type: pod
           labels:
-            application: heat
-            component: db-sync
-        - type: job
-          labels:
-            application: heat
-            component: ks-user
-        - type: job
-          labels:
-            application: heat
-            component: ks-service
-        - type: job
-          labels:
-            application: heat
-            component: ks-endpoints
+            release_group: osh-heat
+            component: test
   values:
     endpoints:
       identity:
@@ -1228,11 +1294,25 @@ data:
   chart_name: barbican-rabbitmq
   release: barbican-rabbitmq
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-barbican-rabbitmq
+  test:
+    enabled: true
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
+    pre:
+      delete:
+        - type: job
+          labels:
+            release_group: osh-barbican-rabbitmq
+        - type: pod
+          labels:
+            release_group: osh-barbican-rabbitmq
+            component: test
   values:
     endpoints:
       oslo_messaging:
@@ -1247,7 +1327,7 @@ data:
           default: barbican-rabbitmq-exporter
     monitoring:
       prometheus:
-        enabled: true
+        enabled: True
     labels:
       server:
         node_selector_key: openstack-control-plane
@@ -1257,7 +1337,7 @@ data:
         node_selector_value: enabled
   source:
     type: local
-    location: ${OSH_PATH}
+    location: ${OSH_INFRA_PATH}
     subpath: rabbitmq
     reference: master
   dependencies:
@@ -1271,33 +1351,25 @@ data:
   chart_name: barbican
   release: barbican
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-barbican
+  test:
+    enabled: true
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
     pre:
       delete:
         - type: job
           labels:
-            application: barbican
-            component: db-init
-        - type: job
+            release_group: osh-barbican
+        - type: pod
           labels:
-            application: barbican
-            component: db-sync
-        - type: job
-          labels:
-            application: barbican
-            component: ks-user
-        - type: job
-          labels:
-            application: barbican
-            component: ks-service
-        - type: job
-          labels:
-            application: barbican
-            component: ks-endpoints
+            release_group: osh-barbican
+            component: test
   values:
     endpoints:
       identity:
@@ -1351,17 +1423,19 @@ data:
   chart_name: prometheus-openstack-exporter
   release: prometheus-openstack-exporter
   namespace: openstack
-  timeout: 1800
+  wait:
+    timeout: 1800
+    labels:
+      release_group: osh-prometheus-openstack-exporter
   install:
-    no_hooks: false
+    no_hooks: False
   upgrade:
-    no_hooks: false
+    no_hooks: False
     pre:
       delete:
         - type: job
           labels:
-            application: prometheus-openstack-exporter
-            component: ks-user
+            release_group: osh-prometheus-openstack-exporter
   values:
     endpoints:
       identity:
@@ -1379,7 +1453,7 @@ data:
     subpath: prometheus-openstack-exporter
     reference: master
   dependencies:
-    - osh-infra-helm-toolkit
+    - helm-toolkit
 ---
 schema: armada/ChartGroup/v1
 metadata:
@@ -1420,17 +1494,6 @@ data:
   sequenced: True
   chart_group:
     - memcached
----
-schema: armada/ChartGroup/v1
-metadata:
-  schema: metadata/Document/v1
-  name: openstack-infra-services
-data:
-  description: "OpenStack Infra Services"
-  sequenced: True
-  chart_group:
-    - libvirt
-    - openvswitch
 ---
 schema: armada/ChartGroup/v1
 metadata:
@@ -1480,9 +1543,11 @@ metadata:
   schema: metadata/Document/v1
   name: openstack-compute-kit
 data:
-  description: "Deploy nova and neutron"
+  description: "Deploy nova and neutron, as well as supporting services"
   sequenced: False
   chart_group:
+    - libvirt
+    - openvswitch
     - nova-rabbitmq
     - nova
     - neutron-rabbitmq
@@ -1531,10 +1596,9 @@ data:
     - openstack-ceph-config
     - deploy-mariadb
     - deploy-memcached
-    - openstack-infra-services
     - openstack-keystone
-    - openstack-glance
     - openstack-radosgw
+    - openstack-glance
     - openstack-cinder
     - openstack-compute-kit
     - openstack-heat

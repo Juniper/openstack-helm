@@ -18,4 +18,5 @@ limitations under the License.
 
 set -ex
 exec magnum-conductor \
-      --config-file /etc/magnum/magnum.conf
+      --config-file /etc/magnum/magnum.conf \
+      --config-file /tmp/pod-shared/magnum.conf

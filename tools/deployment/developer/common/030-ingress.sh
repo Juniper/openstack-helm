@@ -16,10 +16,12 @@
 
 set -xe
 
-#NOTE: Pull images and lint chart
-make pull-images ingress
+#NOTE: Lint and package chart
+: ${OSH_INFRA_PATH:="../openstack-helm-infra"}
+make -C ${OSH_INFRA_PATH} ingress
 
 #NOTE: Deploy command
+: ${OSH_INFRA_PATH:="../openstack-helm-infra"}
 : ${OSH_EXTRA_HELM_ARGS:=""}
 tee /tmp/ingress-kube-system.yaml << EOF
 deployment:
@@ -28,22 +30,28 @@ deployment:
 network:
   host_namespace: true
 EOF
-helm upgrade --install ingress-kube-system ./ingress \
+helm upgrade --install ingress-kube-system ${OSH_INFRA_PATH}/ingress \
   --namespace=kube-system \
   --values=/tmp/ingress-kube-system.yaml \
   ${OSH_EXTRA_HELM_ARGS} \
   ${OSH_EXTRA_HELM_ARGS_INGRESS_KUBE_SYSTEM}
 
-#NOTE: Deploy namespace ingress
-helm upgrade --install ingress-openstack ./ingress \
-  --namespace=openstack \
-  ${OSH_EXTRA_HELM_ARGS} \
-  ${OSH_EXTRA_HELM_ARGS_INGRESS_OPENSTACK}
-
 #NOTE: Wait for deploy
 ./tools/deployment/common/wait-for-pods.sh kube-system
-./tools/deployment/common/wait-for-pods.sh openstack
 
 #NOTE: Display info
 helm status ingress-kube-system
-helm status ingress-openstack
+
+#NOTE: Deploy namespace ingress
+for NAMESPACE in openstack ceph; do
+  helm upgrade --install ingress-${NAMESPACE} ${OSH_INFRA_PATH}/ingress \
+    --namespace=${NAMESPACE} \
+    ${OSH_EXTRA_HELM_ARGS} \
+    ${OSH_EXTRA_HELM_ARGS_INGRESS_OPENSTACK}
+
+  #NOTE: Wait for deploy
+  ./tools/deployment/common/wait-for-pods.sh ${NAMESPACE}
+
+  #NOTE: Display info
+  helm status ingress-${NAMESPACE}
+done

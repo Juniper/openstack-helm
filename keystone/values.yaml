@@ -42,20 +42,36 @@ images:
     keystone_credential_rotate: docker.io/openstackhelm/keystone:newton
     keystone_api: docker.io/openstackhelm/keystone:newton
     keystone_domain_manage: docker.io/openstackhelm/keystone:newton
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
+    image_repo_sync: docker.io/docker:17.07.0
   pull_policy: "IfNotPresent"
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
 
 bootstrap:
   enabled: true
   ks_user: admin
   script: |
-    openstack role create --or-show _member_
+    #NOTE(gagehugo): As of Rocky, keystone creates a member role by default
+    openstack role create --or-show member
     openstack role add \
           --user="${OS_USERNAME}" \
           --user-domain="${OS_USER_DOMAIN_NAME}" \
           --project-domain="${OS_PROJECT_DOMAIN_NAME}" \
           --project="${OS_PROJECT_NAME}" \
-          "_member_"
+          "member"
+
+    #NOTE(portdirect): required for all users who operate heat stacks
+    openstack role create --or-show heat_stack_owner
+    openstack role add \
+          --user="${OS_USERNAME}" \
+          --user-domain="${OS_USER_DOMAIN_NAME}" \
+          --project-domain="${OS_PROJECT_DOMAIN_NAME}" \
+          --project="${OS_PROJECT_NAME}" \
+          "heat_stack_owner"
 
     #NOTE(portdirect): required for all users who operate heat stacks
     openstack role create --or-show heat_stack_owner
@@ -85,12 +101,21 @@ network:
       port: 30357
 
 dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - keystone-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
   static:
     api:
       jobs:
         - keystone-db-sync
         - keystone-credential-setup
         - keystone-fernet-setup
+        - keystone-rabbit-init
       services:
         - endpoint: internal
           service: oslo_cache
@@ -119,6 +144,7 @@ dependencies:
         - keystone-db-init
         - keystone-credential-setup
         - keystone-fernet-setup
+        - keystone-rabbit-init
       services:
         - endpoint: internal
           service: oslo_db
@@ -138,8 +164,15 @@ dependencies:
       services:
         - endpoint: internal
           service: identity
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
 
 pod:
+  user:
+    keystone:
+      uid: 42424
   affinity:
     anti:
       type:
@@ -280,14 +313,24 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
 
 jobs:
   fernet_setup:
     user: keystone
     group: keystone
   fernet_rotate:
-    # weekly
-    cron: "0 0 * * 0"
+    # NOTE(rk760n): key rotation frequency, token expiration, active keys should statisfy the formula
+    # max_active_keys = (token_expiration / rotation_frequency) + 2
+    # as expiration is 12h, and max_active_keys set to 3 by default, rotation_frequency need to be adjusted
+    # 12 hours
+    cron: "0 */12 * * *"
     user: keystone
     group: keystone
     history:
@@ -309,9 +352,14 @@ jobs:
 conf:
   keystone:
     DEFAULT:
+      log_config_append: /etc/keystone/logging.conf
       max_token_size: 255
+      #NOTE(rk760n): if you need auth notifications to be sent, uncomment it
+      #notification_opt_out: ""
     token:
       provider: fernet
+      # 12 hours
+      expiration: 43200
     identity:
       domain_specific_drivers_enabled: True
       domain_config_dir: /etc/keystonedomains
@@ -324,6 +372,8 @@ conf:
     cache:
       enabled: true
       backend: dogpile.cache.memcached
+    oslo_messaging_notifications:
+      driver: messagingv2
   # NOTE(lamt) We can leverage multiple domains with different
   # configurations as outlined in
   # https://docs.openstack.org/keystone/pike/admin/identity-domain-specific-config.html.
@@ -364,10 +414,6 @@ conf:
       use: egg:keystone#service_v3
     app:admin_service:
       use: egg:keystone#admin_service
-    pipeline:public_api:
-      pipeline: cors sizelimit http_proxy_to_wsgi osprofiler url_normalize request_id build_auth_context token_auth json_body ec2_extension public_service
-    pipeline:admin_api:
-      pipeline: cors sizelimit http_proxy_to_wsgi osprofiler url_normalize request_id build_auth_context token_auth json_body ec2_extension s3_extension admin_service
     pipeline:api_v3:
       pipeline: cors sizelimit http_proxy_to_wsgi osprofiler url_normalize request_id build_auth_context token_auth json_body ec2_extension_v3 s3_extension service_v3
     app:public_version_service:
@@ -380,12 +426,10 @@ conf:
       pipeline: cors sizelimit osprofiler url_normalize admin_version_service
     composite:main:
       use: egg:Paste#urlmap
-      /v2.0: public_api
       /v3: api_v3
       /: public_version_api
     composite:admin:
       use: egg:Paste#urlmap
-      /v2.0: admin_api
       /v3: api_v3
       /: admin_version_api
   policy:
@@ -515,7 +559,7 @@ conf:
     identity:remove_endpoint_group_from_project: rule:admin_required
     identity:create_identity_provider: rule:admin_required
     identity:list_identity_providers: rule:admin_required
-    identity:get_identity_providers: rule:admin_required
+    identity:get_identity_provider: rule:admin_required
     identity:update_identity_provider: rule:admin_required
     identity:delete_identity_provider: rule:admin_required
     identity:create_protocol: rule:admin_required
@@ -555,6 +599,20 @@ conf:
     identity:update_domain_config: rule:admin_required
     identity:delete_domain_config: rule:admin_required
     identity:get_domain_config_default: rule:admin_required
+  rabbitmq:
+    #NOTE(rk760n): adding rmq policy to mirror messages from notification queues and set expiration time for the ones
+    policies:
+      - vhost: "keystone"
+        name: "ha_ttl_keystone"
+        definition:
+          #mirror messges to other nodes in rmq cluster
+          ha-mode: "all"
+          ha-sync-mode: "automatic"
+          #70s
+          message-ttl: 70000
+        priority: 0
+        apply-to: all
+        pattern: '(notifications)\.'
   rally_tests:
     run_tempest: false
     tests:
@@ -738,15 +796,124 @@ conf:
           sla:
             failure_rate:
               max: 0
-  mpm_event:
-    override:
-    append:
-  wsgi_keystone:
-    override:
-    append:
-  sso_callback_template:
-    override:
-    append:
+  mpm_event: |
+    <IfModule mpm_event_module>
+      ServerLimit         1024
+      StartServers        32
+      MinSpareThreads     32
+      MaxSpareThreads     256
+      ThreadsPerChild     25
+      MaxRequestsPerChild 128
+      ThreadLimit         720
+    </IfModule>
+  wsgi_keystone: |
+    {{- $portInt := tuple "identity" "internal" "api" $ | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+
+    Listen 0.0.0.0:{{ $portInt }}
+
+    LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" combined
+    LogFormat "%{X-Forwarded-For}i %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" proxy
+
+    SetEnvIf X-Forwarded-For "^.*\..*\..*\..*" forwarded
+    CustomLog /dev/stdout combined env=!forwarded
+    CustomLog /dev/stdout proxy env=forwarded
+
+    <VirtualHost *:{{ $portInt }}>
+        WSGIDaemonProcess keystone-public processes=1 threads=1 user=keystone group=keystone display-name=%{GROUP}
+        WSGIProcessGroup keystone-public
+        WSGIScriptAlias / /var/www/cgi-bin/keystone/keystone-wsgi-public
+        WSGIApplicationGroup %{GLOBAL}
+        WSGIPassAuthorization On
+        <IfVersion >= 2.4>
+          ErrorLogFormat "%{cu}t %M"
+        </IfVersion>
+        ErrorLog /dev/stdout
+
+        SetEnvIf X-Forwarded-For "^.*\..*\..*\..*" forwarded
+        CustomLog /dev/stdout combined env=!forwarded
+        CustomLog /dev/stdout proxy env=forwarded
+    </VirtualHost>
+  sso_callback_template: |
+    <!DOCTYPE html>
+    <html xmlns="http://www.w3.org/1999/xhtml">
+      <head>
+        <title>Keystone WebSSO redirect</title>
+      </head>
+      <body>
+         <form id="sso" name="sso" action="$host" method="post">
+           Please wait...
+           <br/>
+           <input type="hidden" name="token" id="token" value="$token"/>
+           <noscript>
+             <input type="submit" name="submit_no_javascript" id="submit_no_javascript"
+                value="If your JavaScript is disabled, please click to continue"/>
+           </noscript>
+         </form>
+         <script type="text/javascript">
+           window.onload = function() {
+             document.forms['sso'].submit();
+           }
+         </script>
+      </body>
+    </html>
+  logging:
+    loggers:
+      keys:
+        - root
+        - keystone
+    handlers:
+      keys:
+        - stdout
+        - stderr
+        - "null"
+    formatters:
+      keys:
+        - context
+        - default
+    logger_root:
+      level: WARNING
+      handlers: 'null'
+    logger_keystone:
+      level: INFO
+      handlers:
+        - stdout
+      qualname: keystone
+    logger_amqp:
+      level: WARNING
+      handlers: stderr
+      qualname: amqp
+    logger_amqplib:
+      level: WARNING
+      handlers: stderr
+      qualname: amqplib
+    logger_eventletwsgi:
+      level: WARNING
+      handlers: stderr
+      qualname: eventlet.wsgi.server
+    logger_sqlalchemy:
+      level: WARNING
+      handlers: stderr
+      qualname: sqlalchemy
+    logger_boto:
+      level: WARNING
+      handlers: stderr
+      qualname: boto
+    handler_null:
+      class: logging.NullHandler
+      formatter: default
+      args: ()
+    handler_stdout:
+      class: StreamHandler
+      args: (sys.stdout,)
+      formatter: context
+    handler_stderr:
+      class: StreamHandler
+      args: (sys.stderr,)
+      formatter: context
+    formatter_context:
+      class: oslo_log.formatters.ContextFormatter
+    formatter_default:
+      format: "%(message)s"
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
@@ -761,12 +928,28 @@ secrets:
     keystone: keystone-rabbitmq-user
   ldap:
     tls: keystone-ldap-tls
+  tls:
+    identity:
+      api:
+        public: keystone-tls-public
 
 # typically overridden by environmental
 # values, but should include all endpoints
 # required by this chart
 endpoints:
   cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
   identity:
     namespace: null
     name: keystone
@@ -787,19 +970,27 @@ endpoints:
         user_domain_name: default
         project_domain_name: default
     hosts:
-      default: keystone-api
-      public: keystone
+      default: keystone
+      internal: keystone-api
     host_fqdn_override:
       default: null
+      # NOTE(portdirect): this chart supports TLS for fqdn over-ridden public
+      # endpoints using the following format:
+      # public:
+      #   host: null
+      #   tls:
+      #     crt: null
+      #     key: null
     path:
       default: /v3
     scheme:
       default: http
     port:
-      admin:
-        default: 35357
       api:
         default: 80
+        # NOTE(portdirect): to retain portability accross images, and allow
+        # running under a unprivileged user simply, we default to a port > 1000.
+        internal: 5000
   oslo_db:
     namespace: null
     auth:
@@ -831,7 +1022,7 @@ endpoints:
       default: rabbitmq
     host_fqdn_override:
       default: null
-    path: /openstack
+    path: /keystone
     scheme: rabbit
     port:
       amqp:
@@ -860,6 +1051,21 @@ endpoints:
           #   tls_req_cert: allow # Valid values: demand, never, allow
           #   tls_cacertfile: /etc/certs/tls.ca # abs path to the CA cert
           ca: null
+  fluentd:
+    namespace: null
+    name: fluentd
+    hosts:
+      default: fluentd-logging
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: 'http'
+    port:
+      service:
+        default: 24224
+      metrics:
+        default: 24220
 
 manifests:
   configmap_bin: true
@@ -875,12 +1081,14 @@ manifests:
   job_db_drop: false
   job_domain_manage: true
   job_fernet_setup: true
+  job_image_repo_sync: true
   job_rabbit_init: true
   pdb_api: true
   pod_rally_test: true
   secret_credential_keys: true
   secret_db: true
   secret_fernet_keys: true
+  secret_ingress_tls: true
   secret_keystone: true
   secret_rabbitmq: true
   service_ingress_api: true

@@ -16,18 +16,19 @@ limitations under the License.
 
 {{- if .Values.manifests.cron_volume_usage_audit }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.volume_usage_audit }}
 
 {{- $mounts_cinder_volume_usage_audit := .Values.pod.mounts.cinder_volume_usage_audit.cinder_volume_usage_audit }}
 {{- $mounts_cinder_volume_usage_audit_init := .Values.pod.mounts.cinder_volume_usage_audit.init_container }}
 
 {{- $serviceAccountName := "cinder-volume-usage-audit" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "volume_usage_audit" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: batch/v1beta1
 kind: CronJob
 metadata:
   name: cinder-volume-usage-audit
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
 spec:
   schedule: {{ .Values.jobs.volume_usage_audit.cron | quote }}
   successfulJobsHistoryLimit: {{ .Values.jobs.volume_usage_audit.history.success }}
@@ -45,11 +46,10 @@ spec:
           nodeSelector:
             {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
           initContainers:
-{{ tuple $envAll $dependencies $mounts_cinder_volume_usage_audit_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 12 }}
+{{ tuple $envAll "volume_usage_audit" $mounts_cinder_volume_usage_audit_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 12 }}
           containers:
             - name: cinder-volume-usage-audit
-              image: {{ .Values.images.tags.cinder_volume_usage_audit }}
-              imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "cinder_volume_usage_audit" | include "helm-toolkit.snippets.image" | indent 14 }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.volume_usage_audit | include "helm-toolkit.snippets.kubernetes_resources" | indent 14 }}
               command:
                 - /tmp/volume-usage-audit.sh
@@ -60,6 +60,10 @@ spec:
                 mountPath: /etc/cinder/cinder.conf
                 subPath: cinder.conf
                 readOnly: true
+              - name: cinder-etc
+                mountPath: {{ .Values.conf.cinder.DEFAULT.log_config_append }}
+                subPath: {{ base .Values.conf.cinder.DEFAULT.log_config_append }}
+                readOnly: true
               - name: cinder-bin
                 mountPath: /tmp/volume-usage-audit.sh
                 subPath: volume-usage-audit.sh
@@ -69,8 +73,8 @@ spec:
           - name: etccinder
             emptyDir: {}
           - name: cinder-etc
-            configMap:
-              name: cinder-etc
+            secret:
+              secretName: cinder-etc
               defaultMode: 0444
           - name: cinder-bin
             configMap:

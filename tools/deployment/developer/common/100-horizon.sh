@@ -16,8 +16,8 @@
 
 set -xe
 
-#NOTE: Pull images and lint chart
-make pull-images horizon
+#NOTE: Lint and package chart
+make horizon
 
 #NOTE: Deploy command
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}

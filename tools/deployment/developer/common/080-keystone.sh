@@ -16,8 +16,8 @@
 
 set -xe
 
-#NOTE: Pull images and lint chart
-make pull-images keystone
+#NOTE: Lint and package chart
+make keystone
 
 #NOTE: Deploy command
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
@@ -28,7 +28,7 @@ else
 fi
 : ${OSH_EXTRA_HELM_ARGS:=""}
 helm upgrade --install keystone ./keystone \
-    --namespace=openstack $values \
+    --namespace=openstack \
     ${OSH_EXTRA_HELM_ARGS} \
     ${OSH_EXTRA_HELM_ARGS_KEYSTONE}
 

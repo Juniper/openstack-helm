@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Default values for keystone.
+# Default values for senlin.
 # This is a YAML-formatted file.
 # Declare name/value pairs to be passed into your templates.
 # name: value
@@ -27,11 +27,15 @@ labels:
   job:
     node_selector_key: openstack-control-plane
     node_selector_value: enabled
+  test:
+    node_selector_key: openstack-control-plane
+    node_selector_value: enabled
 
 release_group: null
 
 images:
   tags:
+    scripted_test: docker.io/openstackhelm/heat:newton
     bootstrap: docker.io/openstackhelm/heat:newton
     db_init: docker.io/openstackhelm/heat:newton
     senlin_db_sync: docker.io/openstackhelm/senlin:newton
@@ -42,10 +46,49 @@ images:
     ks_endpoints: docker.io/openstackhelm/heat:newton
     senlin_api: docker.io/openstackhelm/senlin:newton
     senlin_engine: docker.io/openstackhelm/senlin:newton
-    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.0
+    senlin_engine_cleaner: docker.io/openstackhelm/senlin:newton
+    dep_check: quay.io/stackanetes/kubernetes-entrypoint:v0.3.1
+    image_repo_sync: docker.io/docker:17.07.0
   pull_policy: "IfNotPresent"
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
+
+jobs:
+  engine_cleaner:
+    cron: "*/5 * * * *"
+    history:
+      success: 3
+      failed: 1
 
 conf:
+  rally_tests:
+    run_tempest: false
+    tests:
+      SenlinClusters.create_and_delete_cluster:
+        - args:
+            desired_capacity: 3
+            min_size: 0
+            max_size: 5
+          runner:
+            concurrency: 1
+            times: 1
+            type: constant
+          sla:
+            failure_rate:
+              max: 0
+          context:
+            profiles:
+              type: os.nova.server
+              version: "1.0"
+              properties:
+                name: cirros_server
+                flavor: 689eeda3-c6cd-450f-b000-58025c783763
+                image: df0c1a14-0940-4ae5-be5c-bb06aa407da2
+                networks:
+                  - network: public
   paste:
     pipeline:senlin-api:
       pipeline: request_id faultwrap ssl versionnegotiation webhook authtoken context trust apiv1app
@@ -122,9 +165,13 @@ conf:
     webhooks:trigger: ''
   senlin:
     DEFAULT:
+      log_config_append: /etc/senlin/logging.conf
       transport_url: null
+      host: senlin
     database:
       max_retries: -1
+    authentication:
+      auth_url: null
     keystone_authtoken:
       auth_type: password
       auth_version: v3
@@ -133,6 +180,64 @@ conf:
       # NOTE(portdirect): the bind port should not be defined, and is manipulated
       # via the endpoints section.
       bind_port: null
+  logging:
+    loggers:
+      keys:
+        - root
+        - senlin
+    handlers:
+      keys:
+        - stdout
+        - stderr
+        - "null"
+    formatters:
+      keys:
+        - context
+        - default
+    logger_root:
+      level: WARNING
+      handlers: 'null'
+    logger_senlin:
+      level: INFO
+      handlers:
+        - stdout
+      qualname: senlin
+    logger_amqp:
+      level: WARNING
+      handlers: stderr
+      qualname: amqp
+    logger_amqplib:
+      level: WARNING
+      handlers: stderr
+      qualname: amqplib
+    logger_eventletwsgi:
+      level: WARNING
+      handlers: stderr
+      qualname: eventlet.wsgi.server
+    logger_sqlalchemy:
+      level: WARNING
+      handlers: stderr
+      qualname: sqlalchemy
+    logger_boto:
+      level: WARNING
+      handlers: stderr
+      qualname: boto
+    handler_null:
+      class: logging.NullHandler
+      formatter: default
+      args: ()
+    handler_stdout:
+      class: StreamHandler
+      args: (sys.stdout,)
+      formatter: context
+    handler_stderr:
+      class: StreamHandler
+      args: (sys.stderr,)
+      formatter: context
+    formatter_context:
+      class: oslo_log.formatters.ContextFormatter
+    formatter_default:
+      format: "%(message)s"
 
 network:
   api:
@@ -154,17 +259,38 @@ bootstrap:
     openstack token issue
 
 dependencies:
+  dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - senlin-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
   static:
+    engine_cleaner:
+      jobs:
+        - senlin-db-sync
+      services:
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
+          service: identity
     api:
       jobs:
         - senlin-db-sync
         - senlin-ks-user
         - senlin-ks-endpoints
+        - senlin-rabbit-init
       services:
         - endpoint: internal
           service: oslo_db
         - endpoint: internal
           service: identity
+        - endpoint: internal
+          service: oslo_messaging
     db_drop:
       services:
         - endpoint: internal
@@ -184,7 +310,8 @@ dependencies:
         - senlin-db-sync
         - senlin-ks-user
         - senlin-ks-endpoints
-      servics:
+        - senlin-rabbit-init
+      services:
         - endpoint: internal
           service: oslo_db
         - endpoint: internal
@@ -205,8 +332,18 @@ dependencies:
           service: identity
     rabbit_init:
       services:
-        - service: oslo_messaging
-          endpoint: internal
+        - endpoint: internal
+          service: oslo_messaging
+    tests:
+      services:
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: clustering
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
@@ -225,6 +362,18 @@ secrets:
 # required by this chart
 endpoints:
   cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
   identity:
     name: keystone
     auth:
@@ -241,11 +390,19 @@ endpoints:
         username: senlin
         password: password
         project_name: service
-        user_domain_name: default
-        project_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
+      test:
+        role: admin
+        region_name: RegionOne
+        username: test
+        password: password
+        project_name: test
+        user_domain_name: service
+        project_domain_name: service
     hosts:
-      default: keystone-api
-      public: keystone
+      default: keystone
+      internal: keystone-api
     host_fqdn_override:
       default: null
     path:
@@ -253,10 +410,9 @@ endpoints:
     scheme:
       default: http
     port:
-      admin:
-        default: 35357
       api:
         default: 80
+        internal: 5000
   clustering:
     name: senlin
     hosts:
@@ -316,13 +472,28 @@ endpoints:
       default: rabbitmq
     host_fqdn_override:
       default: null
-    path: /
+    path: /senlin
     scheme: rabbit
     port:
       amqp:
         default: 5672
       http:
         default: 15672
+  fluentd:
+    namespace: null
+    name: fluentd
+    hosts:
+      default: fluentd-logging
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: 'http'
+    port:
+      service:
+        default: 24224
+      metrics:
+        default: 24220
 
 pod:
   user:
@@ -344,6 +515,12 @@ pod:
     senlin_bootstrap:
       init_container: null
       senlin_bootstrap:
+    senlin_engine_cleaner:
+      init_container: null
+      senlin_engine_cleaner:
+    senlin_tests:
+      init_container: null
+      senlin_tests:
   replicas:
     api: 1
     engine: 1
@@ -441,24 +618,41 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      engine_cleaner:
+        requests:
+          memory: "124Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
 
 manifests:
   configmap_bin: true
   configmap_etc: true
+  cron_job_engine_cleaner: true
   deployment_api: true
+  deployment_engine: true
   ingress_api: true
   job_bootstrap: true
   job_db_init: true
   job_db_sync: true
   job_db_drop: false
+  job_image_repo_sync: true
   job_ks_endpoints: true
   job_ks_service: true
   job_ks_user: true
   job_rabbit_init: true
   pdb_api: true
+  pod_test: true
   secret_db: true
   secret_keystone: true
   secret_rabbitmq: true
   service_ingress_api: true
   service_api: true
-  statefulset_engine: true

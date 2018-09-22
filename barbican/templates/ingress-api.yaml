@@ -15,6 +15,6 @@ limitations under the License.
 */}}
 
 {{- if and .Values.manifests.ingress_api .Values.network.api.ingress.public }}
-{{- $ingressOpts := dict "envAll" . "backendServiceType" "key-manager" "backendPort" "b-api" -}}
+{{- $ingressOpts := dict "envAll" . "backendServiceType" "key_manager" "backendPort" "b-api" -}}
 {{ $ingressOpts | include "helm-toolkit.manifests.ingress" }}
 {{- end }}

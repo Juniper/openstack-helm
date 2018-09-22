@@ -16,20 +16,26 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_scheduler }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.scheduler }}
 
 {{- $mounts_cinder_scheduler := .Values.pod.mounts.cinder_scheduler.cinder_scheduler }}
 {{- $mounts_cinder_scheduler_init := .Values.pod.mounts.cinder_scheduler.init_container }}
 
 {{- $serviceAccountName := "cinder-scheduler" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "scheduler" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cinder-scheduler
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "cinder" "scheduler" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
   replicas: {{ .Values.pod.replicas.scheduler }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "cinder" "scheduler" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
 {{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
   template:
     metadata:
@@ -45,11 +51,10 @@ spec:
       nodeSelector:
         {{ .Values.labels.scheduler.node_selector_key }}: {{ .Values.labels.scheduler.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies $mounts_cinder_scheduler_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "scheduler" $mounts_cinder_scheduler_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
         {{- if eq ( split "://" .Values.conf.cinder.coordination.backend_url )._0 "file" }}
         - name: ceph-coordination-volume-perms
-          image: {{ .Values.images.tags.cinder_backup }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "cinder_scheduler" | include "helm-toolkit.snippets.image" | indent 10 }}
           securityContext:
             runAsUser: 0
           command:
@@ -63,8 +68,7 @@ spec:
         {{ end }}
       containers:
         - name: cinder-scheduler
-          image: {{ .Values.images.tags.cinder_scheduler }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "cinder_scheduler" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.scheduler | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           securityContext:
             runAsUser: {{ .Values.pod.user.cinder.uid }}
@@ -78,6 +82,10 @@ spec:
             - name: cinder-etc
               mountPath: /etc/cinder/cinder.conf
               subPath: cinder.conf
+              readOnly: true
+            - name: cinder-etc
+              mountPath: {{ .Values.conf.cinder.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.cinder.DEFAULT.log_config_append }}
               readOnly: true
             - name: cinder-etc
               mountPath: /etc/cinder/api-paste.ini
@@ -98,8 +106,8 @@ spec:
             name: cinder-bin
             defaultMode: 0555
         - name: cinder-etc
-          configMap:
-            name: cinder-etc
+          secret:
+            secretName: cinder-etc
             defaultMode: 0444
         {{- if eq ( split "://" .Values.conf.cinder.coordination.backend_url )._0 "file" }}
         #NOTE (portdirect): this will need to be set to a shared mount amongst all cinder

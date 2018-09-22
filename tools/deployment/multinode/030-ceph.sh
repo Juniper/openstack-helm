@@ -17,7 +17,7 @@
 set -xe
 
 #NOTE: Deploy command
-uuidgen > /tmp/ceph-fs-uuid.txt
+[ -s /tmp/ceph-fs-uuid.txt ] || uuidgen > /tmp/ceph-fs-uuid.txt
 CEPH_PUBLIC_NETWORK="$(./tools/deployment/multinode/kube-node-subnet.sh)"
 CEPH_CLUSTER_NETWORK="$(./tools/deployment/multinode/kube-node-subnet.sh)"
 CEPH_FS_ID="$(cat /tmp/ceph-fs-uuid.txt)"
@@ -75,19 +75,23 @@ conf:
           type: directory
           location: /var/lib/openstack-helm/ceph/osd/journal-one
 EOF
-helm upgrade --install ceph ./ceph \
-  --namespace=ceph \
-  --values=/tmp/ceph.yaml \
-  ${OSH_EXTRA_HELM_ARGS} \
-  ${OSH_EXTRA_HELM_ARGS_CEPH_DEPLOY}
 
-#NOTE: Wait for deploy
-./tools/deployment/common/wait-for-pods.sh ceph 1200
+: ${OSH_INFRA_PATH:="../openstack-helm-infra"}
+for CHART in ceph-mon ceph-osd ceph-client ceph-provisioners; do
+  helm upgrade --install ${CHART} ${OSH_INFRA_PATH}/${CHART} \
+    --namespace=ceph \
+    --values=/tmp/ceph.yaml \
+    ${OSH_EXTRA_HELM_ARGS} \
+    ${OSH_EXTRA_HELM_ARGS_CEPH_DEPLOY}
 
-#NOTE: Validate deploy
-MON_POD=$(kubectl get pods \
-  --namespace=ceph \
-  --selector="application=ceph" \
-  --selector="component=mon" \
-  --no-headers | awk '{ print $1; exit }')
-kubectl exec -n ceph ${MON_POD} -- ceph -s
+  #NOTE: Wait for deploy
+  ./tools/deployment/common/wait-for-pods.sh ceph 1200
+
+  #NOTE: Validate deploy
+  MON_POD=$(kubectl get pods \
+    --namespace=ceph \
+    --selector="application=ceph" \
+    --selector="component=mon" \
+    --no-headers | awk '{ print $1; exit }')
+  kubectl exec -n ceph ${MON_POD} -- ceph -s
+done

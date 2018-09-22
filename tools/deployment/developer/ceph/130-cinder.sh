@@ -15,8 +15,8 @@
 #    under the License.
 set -xe
 
-#NOTE: Pull images and lint chart
-make pull-images cinder
+#NOTE: Lint and package chart
+make cinder
 
 #NOTE: Deploy command
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
@@ -40,11 +40,9 @@ conf:
         chunk_size: 8
 EOF
 helm upgrade --install cinder ./cinder \
-  --namespace=openstack $values \
 <<<<<<< HEAD
-=======
+  --namespace=openstack \
   --values=/tmp/cinder.yaml \
->>>>>>> f1e1338... Opencontrail support for ocata charts
   ${OSH_EXTRA_HELM_ARGS} \
   ${OSH_EXTRA_HELM_ARGS_CINDER}
 

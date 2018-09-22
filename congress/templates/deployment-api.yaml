@@ -16,17 +16,23 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_api }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.api }}
 
 {{- $serviceAccountName := "congress-api" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "api" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: congress-api
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "congress" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
   replicas: {{ .Values.pod.replicas.api }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "congress" "api" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
 {{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
   template:
     metadata:
@@ -37,43 +43,46 @@ spec:
       affinity:
 {{ tuple $envAll "congress" "api" | include "helm-toolkit.snippets.kubernetes_pod_anti_affinity" | indent 8 }}
       initContainers:
-{{ tuple $envAll $dependencies list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "api" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       nodeSelector:
         {{ .Values.labels.api.node_selector_key }}: {{ .Values.labels.api.node_selector_value }}
       containers:
-      - name: congress-api
-        image: {{ .Values.images.tags.congress_api }}
-        imagePullPolicy: {{ .Values.images.pull_policy }}
-        securityContext:
-          runAsUser: {{ .Values.pod.user.congress.uid }}
-        command:
-          - /tmp/congress-api.sh
-          - start
-        ports:
-          - name: c-api
-            containerPort: {{ tuple "policy" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
-        readinessProbe:
-          tcpSocket:
-            port: {{ tuple "policy" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
-        volumeMounts:
-          - name: etccongress
-            mountPath: /etc/congress
-          - name: congress-bin
-            mountPath: /tmp/congress-api.sh
-            subPath: congress-api.sh
-            readOnly: true
-          - name: congress-etc
-            mountPath: /etc/congress/congress.conf
-            subPath: congress.conf
-            readOnly: true
-          - name: congress-etc
-            mountPath: /etc/congress/api-paste.ini
-            subPath: api-paste.ini
-            readOnly: true
-          - name: congress-etc
-            mountPath: /etc/congress/policy.json
-            subPath: policy.json
-            readOnly: true
+        - name: congress-api
+{{ tuple $envAll "congress_api" | include "helm-toolkit.snippets.image" | indent 10 }}
+          securityContext:
+            runAsUser: {{ .Values.pod.user.congress.uid }}
+          command:
+            - /tmp/congress-api.sh
+            - start
+          ports:
+            - name: c-api
+              containerPort: {{ tuple "policy" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ tuple "policy" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+          volumeMounts:
+            - name: etccongress
+              mountPath: /etc/congress
+            - name: congress-bin
+              mountPath: /tmp/congress-api.sh
+              subPath: congress-api.sh
+              readOnly: true
+            - name: congress-etc
+              mountPath: /etc/congress/congress.conf
+              subPath: congress.conf
+              readOnly: true
+            - name: congress-etc
+              mountPath: {{ .Values.conf.congress.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.congress.DEFAULT.log_config_append }}
+              readOnly: true
+            - name: congress-etc
+              mountPath: /etc/congress/api-paste.ini
+              subPath: api-paste.ini
+              readOnly: true
+            - name: congress-etc
+              mountPath: /etc/congress/policy.json
+              subPath: policy.json
+              readOnly: true
       volumes:
         - name: etccongress
           emptyDir: {}
@@ -82,7 +91,7 @@ spec:
             name: congress-bin
             defaultMode: 0777
         - name: congress-etc
-          configMap:
-            name: congress-etc
+          secret:
+            secretName: congress-etc
             defaultMode: 0444
 {{ end }}

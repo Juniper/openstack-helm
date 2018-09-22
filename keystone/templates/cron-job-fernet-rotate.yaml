@@ -17,13 +17,12 @@ limitations under the License.
 {{- if .Values.manifests.cron_fernet_rotate }}
 {{- if eq .Values.conf.keystone.token.provider "fernet" }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.fernet_rotate }}
 
 {{- $mounts_keystone_fernet_rotate := .Values.pod.mounts.keystone_fernet_rotate.keystone_fernet_rotate }}
 {{- $mounts_keystone_fernet_rotate_init := .Values.pod.mounts.keystone_fernet_rotate.init_container }}
 
 {{- $serviceAccountName := "keystone-fernet-rotate" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "fernet_rotate" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: Role
@@ -57,6 +56,8 @@ apiVersion: batch/v1beta1
 kind: CronJob
 metadata:
   name: keystone-fernet-rotate
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
 spec:
   schedule: {{ .Values.jobs.fernet_rotate.cron | quote }}
   successfulJobsHistoryLimit: {{ .Values.jobs.fernet_rotate.history.success }}
@@ -71,14 +72,13 @@ spec:
         spec:
           serviceAccountName: {{ $serviceAccountName }}
           initContainers:
-{{ tuple $envAll $dependencies $mounts_keystone_fernet_rotate_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 12 }}
+{{ tuple $envAll "fernet_rotate" $mounts_keystone_fernet_rotate_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 12 }}
           restartPolicy: OnFailure
           nodeSelector:
             {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
           containers:
             - name: keystone-fernet-rotate
-              image: {{ .Values.images.tags.keystone_fernet_rotate }}
-              imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "keystone_fernet_rotate" | include "helm-toolkit.snippets.image" | indent 14 }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.fernet_rotate | include "helm-toolkit.snippets.kubernetes_resources" | indent 14 }}
               env:
               - name: KEYSTONE_USER
@@ -100,6 +100,10 @@ spec:
                 mountPath: /etc/keystone/keystone.conf
                 subPath: keystone.conf
                 readOnly: true
+              - name: keystone-etc
+                mountPath: {{ .Values.conf.keystone.DEFAULT.log_config_append }}
+                subPath: {{ base .Values.conf.keystone.DEFAULT.log_config_append }}
+                readOnly: true
               - name: keystone-bin
                 mountPath: /tmp/fernet-manage.py
                 subPath: fernet-manage.py
@@ -109,8 +113,8 @@ spec:
           - name: etckeystone
             emptyDir: {}
           - name: keystone-etc
-            configMap:
-              name: keystone-etc
+            secret:
+              secretName: keystone-etc
               defaultMode: 0444
           - name: keystone-bin
             configMap:

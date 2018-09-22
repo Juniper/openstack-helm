@@ -16,20 +16,26 @@ limitations under the License.
 
 {{- if .Values.manifests.deployment_scheduler }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.scheduler }}
 
 {{- $mounts_nova_scheduler := .Values.pod.mounts.nova_scheduler.nova_conductor }}
 {{- $mounts_nova_scheduler_init := .Values.pod.mounts.nova_scheduler.init_container }}
 
 {{- $serviceAccountName := "nova-scheduler" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "scheduler" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nova-scheduler
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
+  labels:
+{{ tuple $envAll "nova" "scheduler" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 4 }}
 spec:
   replicas: {{ .Values.pod.replicas.scheduler }}
+  selector:
+    matchLabels:
+{{ tuple $envAll "nova" "scheduler" | include "helm-toolkit.snippets.kubernetes_metadata_labels" | indent 6 }}
 {{ tuple $envAll | include "helm-toolkit.snippets.kubernetes_upgrades_deployment" | indent 2 }}
   template:
     metadata:
@@ -45,11 +51,10 @@ spec:
       nodeSelector:
         {{ .Values.labels.scheduler.node_selector_key }}: {{ .Values.labels.scheduler.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies $mounts_nova_scheduler_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "scheduler" $mounts_nova_scheduler_init | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
       containers:
         - name: nova-scheduler
-          image: {{ .Values.images.tags.nova_scheduler }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "nova_scheduler" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.scheduler | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           securityContext:
             runAsUser: {{ .Values.pod.user.nova.uid }}
@@ -65,6 +70,10 @@ spec:
               subPath: nova.conf
               readOnly: true
             - name: nova-etc
+              mountPath: {{ .Values.conf.nova.DEFAULT.log_config_append }}
+              subPath: {{ base .Values.conf.nova.DEFAULT.log_config_append }}
+              readOnly: true
+            - name: nova-etc
               mountPath: /etc/nova/policy.yaml
               subPath: policy.yaml
               readOnly: true
@@ -75,8 +84,8 @@ spec:
             name: nova-bin
             defaultMode: 0555
         - name: nova-etc
-          configMap:
-            name: nova-etc
+          secret:
+            secretName: nova-etc
             defaultMode: 0444
 {{ if $mounts_nova_scheduler.volumes }}{{ toYaml $mounts_nova_scheduler.volumes | indent 8 }}{{ end }}
 {{- end }}

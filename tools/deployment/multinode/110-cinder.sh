@@ -36,7 +36,7 @@ conf:
       backup_driver: cinder.backup.drivers.swift
 EOF
 helm upgrade --install cinder ./cinder \
-  --namespace=openstack $values \
+  --namespace=openstack \
   --values=/tmp/cinder.yaml \
   ${OSH_EXTRA_HELM_ARGS} \
   ${OSH_EXTRA_HELM_ARGS_CINDER}

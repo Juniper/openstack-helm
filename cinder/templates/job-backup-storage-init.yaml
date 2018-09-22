@@ -16,10 +16,9 @@ limitations under the License.
 
 {{- if .Values.manifests.job_backup_storage_init }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.backup_storage_init }}
 
 {{- $serviceAccountName := "cinder-backup-storage-init" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "backup_storage_init" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: Role
@@ -53,6 +52,8 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: cinder-backup-storage-init
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
 spec:
   template:
     metadata:
@@ -64,11 +65,10 @@ spec:
       nodeSelector:
         {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
+{{ tuple $envAll "backup_storage_init" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container" | indent 8 }}
         {{- if eq .Values.conf.cinder.DEFAULT.backup_driver "cinder.backup.drivers.ceph" }}
         - name: ceph-keyring-placement
-          image: {{ .Values.images.tags.cinder_backup_storage_init }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "cinder_backup_storage_init" | include "helm-toolkit.snippets.image" | indent 10 }}
           securityContext:
             runAsUser: 0
           command:
@@ -76,19 +76,27 @@ spec:
           volumeMounts:
             - name: etcceph
               mountPath: /etc/ceph
+            {{- if not .Values.backup.external_ceph_rbd.enabled }}
             - name: cinder-bin
               mountPath: /tmp/ceph-admin-keyring.sh
               subPath: ceph-admin-keyring.sh
               readOnly: true
+           {{- else }}
+            - name: cinder-bin
+              mountPath: /tmp/ceph-admin-keyring.sh
+              subPath: external-ceph-rbd-admin-keyring.sh
+              readOnly: true
+            {{ end }}
+            {{- if empty .Values.conf.ceph.admin_keyring }}
             - name: ceph-keyring
               mountPath: /tmp/client-keyring
               subPath: key
               readOnly: true
+            {{ end }}
         {{ end }}
       containers:
         - name: cinder-backup-storage-init
-          image: {{ .Values.images.tags.cinder_backup_storage_init }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "cinder_backup_storage_init" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.backup_storage_init | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           env:
             - name: NAMESPACE
@@ -121,14 +129,23 @@ spec:
             {{- if eq .Values.conf.cinder.DEFAULT.backup_driver "cinder.backup.drivers.ceph" }}
             - name: etcceph
               mountPath: /etc/ceph
+            {{- if not .Values.backup.external_ceph_rbd.enabled }}
             - name: ceph-etc
               mountPath: /etc/ceph/ceph.conf
               subPath: ceph.conf
               readOnly: true
+            {{- else }}
+            - name: cinder-etc
+              mountPath: /etc/ceph/ceph.conf
+              subPath: external-backup-ceph.conf
+              readOnly: true
+            {{- end }}
+            {{- if empty .Values.conf.ceph.admin_keyring }}
             - name: ceph-keyring
               mountPath: /tmp/client-keyring
               subPath: key
               readOnly: true
+            {{- end }}
             {{- end }}
       volumes:
         - name: cinder-bin
@@ -140,10 +157,18 @@ spec:
           emptyDir: {}
         - name: ceph-etc
           configMap:
-            name: ceph-etc
+            name: {{ .Values.ceph_client.configmap }}
             defaultMode: 0444
+        {{- if .Values.backup.external_ceph_rbd.enabled }}
+        - name: cinder-etc
+          secret:
+            secretName: cinder-etc
+            defaultMode: 0444
+        {{- end }}
+        {{- if empty .Values.conf.ceph.admin_keyring }}
         - name: ceph-keyring
           secret:
-            secretName: pvc-ceph-client-key
+            secretName: {{ .Values.ceph_client.user_secret_name }}
+        {{ end }}
         {{ end }}
 {{- end }}

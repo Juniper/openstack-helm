@@ -20,76 +20,86 @@ limitations under the License.
 {{- with $envAll }}
 
 {{- if empty $envAll.Values.conf.neutron.keystone_authtoken.auth_uri -}}
-{{- tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set $envAll.Values.conf.neutron.keystone_authtoken "auth_uri" | quote | trunc 0 -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set $envAll.Values.conf.neutron.keystone_authtoken "auth_uri" -}}
 {{- end }}
 
 {{- if empty $envAll.Values.conf.neutron.keystone_authtoken.auth_url -}}
-{{- tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set $envAll.Values.conf.neutron.keystone_authtoken "auth_url" | quote | trunc 0 -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set $envAll.Values.conf.neutron.keystone_authtoken "auth_url" -}}
 {{- end }}
 
 {{- if empty .Values.conf.neutron.keystone_authtoken.project_name -}}
-{{- set .Values.conf.neutron.keystone_authtoken "project_name" .Values.endpoints.identity.auth.neutron.project_name | quote | trunc 0 -}}
+{{- $_ := set .Values.conf.neutron.keystone_authtoken "project_name" .Values.endpoints.identity.auth.neutron.project_name -}}
 {{- end -}}
 {{- if empty $envAll.Values.conf.neutron.keystone_authtoken.project_domain_name -}}
-{{- set $envAll.Values.conf.neutron.keystone_authtoken "project_domain_name" $envAll.Values.endpoints.identity.auth.neutron.project_domain_name | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.neutron.keystone_authtoken "project_domain_name" $envAll.Values.endpoints.identity.auth.neutron.project_domain_name -}}
 {{- end -}}
 {{- if empty $envAll.Values.conf.neutron.keystone_authtoken.user_domain_name -}}
-{{- set $envAll.Values.conf.neutron.keystone_authtoken "user_domain_name" $envAll.Values.endpoints.identity.auth.neutron.user_domain_name | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.neutron.keystone_authtoken "user_domain_name" $envAll.Values.endpoints.identity.auth.neutron.user_domain_name -}}
 {{- end -}}
 {{- if empty $envAll.Values.conf.neutron.keystone_authtoken.username -}}
-{{- set $envAll.Values.conf.neutron.keystone_authtoken "username" $envAll.Values.endpoints.identity.auth.neutron.username | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.neutron.keystone_authtoken "username" $envAll.Values.endpoints.identity.auth.neutron.username -}}
 {{- end -}}
 {{- if empty $envAll.Values.conf.neutron.keystone_authtoken.password -}}
-{{- set $envAll.Values.conf.neutron.keystone_authtoken "password" $envAll.Values.endpoints.identity.auth.neutron.password | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.neutron.keystone_authtoken "password" $envAll.Values.endpoints.identity.auth.neutron.password -}}
 {{- end -}}
 {{- if empty $envAll.Values.conf.neutron.keystone_authtoken.region_name -}}
-{{- set $envAll.Values.conf.neutron.keystone_authtoken "region_name" $envAll.Values.endpoints.identity.auth.neutron.region_name | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.neutron.keystone_authtoken "region_name" $envAll.Values.endpoints.identity.auth.neutron.region_name -}}
 {{- end -}}
 
 {{- if empty $envAll.Values.conf.neutron.keystone_authtoken.memcached_servers -}}
-{{- tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set $envAll.Values.conf.neutron.keystone_authtoken "memcached_servers" | quote | trunc 0 -}}
+{{- $_ := tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set $envAll.Values.conf.neutron.keystone_authtoken "memcached_servers" -}}
 {{- end }}
 {{- if empty .Values.conf.neutron.keystone_authtoken.memcache_secret_key -}}
-{{- set .Values.conf.neutron.keystone_authtoken "memcache_secret_key" ( default ( randAlphaNum 64 ) .Values.endpoints.oslo_cache.auth.memcache_secret_key ) | quote | trunc 0 -}}
+{{- $_ := set .Values.conf.neutron.keystone_authtoken "memcache_secret_key" ( default ( randAlphaNum 64 ) .Values.endpoints.oslo_cache.auth.memcache_secret_key ) -}}
 {{- end -}}
 
 {{- if empty $envAll.Values.conf.neutron.database.connection -}}
-{{- tuple "oslo_db" "internal" "neutron" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup"| set $envAll.Values.conf.neutron.database "connection" | quote | trunc 0 -}}
+<<<<<<< HEAD
+{{- $_ := tuple "oslo_db" "internal" "neutron" "mysql" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup"| set $envAll.Values.conf.neutron.database "connection" -}}
 {{- end }}
 
 {{- if empty $envAll.Values.conf.neutron.DEFAULT.transport_url -}}
-{{- tuple "oslo_messaging" "internal" "neutron" "amqp" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" | set $envAll.Values.conf.neutron.DEFAULT "transport_url" | quote | trunc 0 -}}
+{{- $_ := tuple "oslo_messaging" "internal" "neutron" "amqp" . | include "helm-toolkit.endpoints.authenticated_endpoint_uri_lookup" | set $envAll.Values.conf.neutron.DEFAULT "transport_url" -}}
 {{- end }}
 
 {{- if empty $envAll.Values.conf.neutron.nova.auth_url -}}
-{{- tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set $envAll.Values.conf.neutron.nova "auth_url" | quote | trunc 0 -}}
+{{- $_ := tuple "identity" "internal" "api" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup"| set $envAll.Values.conf.neutron.nova "auth_url" -}}
 {{- end }}
 
 {{- if empty $envAll.Values.conf.neutron.nova.region_name -}}
-{{- set $envAll.Values.conf.neutron.nova "region_name" $envAll.Values.endpoints.identity.auth.nova.region_name | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.neutron.nova "region_name" $envAll.Values.endpoints.identity.auth.nova.region_name -}}
 {{- end -}}
 {{- if empty $envAll.Values.conf.neutron.nova.project_name -}}
-{{- set $envAll.Values.conf.neutron.nova "project_name" $envAll.Values.endpoints.identity.auth.nova.project_name | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.neutron.nova "project_name" $envAll.Values.endpoints.identity.auth.nova.project_name -}}
 {{- end -}}
 {{- if empty $envAll.Values.conf.neutron.nova.project_domain_name -}}
-{{- set $envAll.Values.conf.neutron.nova "project_domain_name" $envAll.Values.endpoints.identity.auth.nova.project_domain_name | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.neutron.nova "project_domain_name" $envAll.Values.endpoints.identity.auth.nova.project_domain_name -}}
 {{- end -}}
 {{- if empty $envAll.Values.conf.neutron.nova.user_domain_name -}}
-{{- set $envAll.Values.conf.neutron.nova "user_domain_name" $envAll.Values.endpoints.identity.auth.nova.user_domain_name | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.neutron.nova "user_domain_name" $envAll.Values.endpoints.identity.auth.nova.user_domain_name -}}
 {{- end -}}
 {{- if empty $envAll.Values.conf.neutron.nova.username -}}
-{{- set $envAll.Values.conf.neutron.nova "username" $envAll.Values.endpoints.identity.auth.nova.username | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.neutron.nova "username" $envAll.Values.endpoints.identity.auth.nova.username -}}
 {{- end -}}
 {{- if empty $envAll.Values.conf.neutron.nova.password -}}
-{{- set $envAll.Values.conf.neutron.nova "password" $envAll.Values.endpoints.identity.auth.nova.password | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.neutron.nova "password" $envAll.Values.endpoints.identity.auth.nova.password -}}
 {{- end -}}
 
+{{/*
+nova_metadata_ip can go away when Newton is no longer supported, otherwise
+just set it along with nova_metadata_host.
+*/}}
 {{- if empty $envAll.Values.conf.metadata_agent.DEFAULT.nova_metadata_ip -}}
-{{- tuple "compute_metadata" "public" . | include "helm-toolkit.endpoints.hostname_fqdn_endpoint_lookup" | set $envAll.Values.conf.metadata_agent.DEFAULT "nova_metadata_ip" | quote | trunc 0 -}}
-{{- set $envAll.Values.conf.metadata_agent.DEFAULT "nova_metadata_port" 80 | quote | trunc 0 -}}
+{{- $_ := tuple "compute_metadata" "public" . | include "helm-toolkit.endpoints.hostname_fqdn_endpoint_lookup" | set $envAll.Values.conf.metadata_agent.DEFAULT "nova_metadata_ip" -}}
+{{- end -}}
+{{- if empty $envAll.Values.conf.metadata_agent.DEFAULT.nova_metadata_host -}}
+{{- $_ := tuple "compute_metadata" "public" . | include "helm-toolkit.endpoints.hostname_fqdn_endpoint_lookup" | set $envAll.Values.conf.metadata_agent.DEFAULT "nova_metadata_host" -}}
+{{- end -}}
+{{- if empty $envAll.Values.conf.metadata_agent.DEFAULT.nova_metadata_port -}}
+{{- $_ := set $envAll.Values.conf.metadata_agent.DEFAULT "nova_metadata_port" 80 -}}
 {{- end -}}
 {{- if empty $envAll.Values.conf.metadata_agent.cache.memcache_servers -}}
-{{- tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set $envAll.Values.conf.metadata_agent.cache "memcache_servers" | quote | trunc 0 -}}
+{{- $_ := tuple "oslo_cache" "internal" "memcache" . | include "helm-toolkit.endpoints.host_and_port_endpoint_uri_lookup" | set $envAll.Values.conf.metadata_agent.cache "memcache_servers" -}}
 {{- end -}}
 
 {{- if empty $envAll.Values.conf.neutron.DEFAULT.interface_driver -}}
@@ -102,7 +112,7 @@ limitations under the License.
 {{ $__interface_driver := append $envAll.Values.__interface_driver "linuxbridge" }}
 {{- $_ := set $envAll.Values "__interface_driver" $__interface_driver }}
 {{- end -}}
-{{- set $envAll.Values.conf.neutron.DEFAULT "interface_driver" $envAll.Values.__interface_driver | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.neutron.DEFAULT "interface_driver" $envAll.Values.__interface_driver -}}
 {{- end -}}
 
 {{- if empty $envAll.Values.conf.dhcp_agent.DEFAULT.interface_driver -}}
@@ -115,7 +125,7 @@ limitations under the License.
 {{ $__interface_driver := append $envAll.Values.__interface_driver "linuxbridge" }}
 {{- $_ := set $envAll.Values "__interface_driver" $__interface_driver }}
 {{- end -}}
-{{- set $envAll.Values.conf.dhcp_agent.DEFAULT "interface_driver" $envAll.Values.__interface_driver | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.dhcp_agent.DEFAULT "interface_driver" $envAll.Values.__interface_driver -}}
 {{- end -}}
 
 {{- if empty $envAll.Values.conf.l3_agent.DEFAULT.interface_driver -}}
@@ -128,7 +138,7 @@ limitations under the License.
 {{ $__interface_driver := append $envAll.Values.__interface_driver "linuxbridge" }}
 {{- $_ := set $envAll.Values "__interface_driver" $__interface_driver }}
 {{- end -}}
-{{- set $envAll.Values.conf.l3_agent.DEFAULT "interface_driver" $envAll.Values.__interface_driver | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.l3_agent.DEFAULT "interface_driver" $envAll.Values.__interface_driver -}}
 {{- end -}}
 
 {{- if empty $envAll.Values.conf.plugins.ml2_conf.ml2.mechanism_drivers -}}
@@ -141,13 +151,25 @@ limitations under the License.
 {{ $__mechanism_drivers := append $envAll.Values.__mechanism_drivers "linuxbridge" }}
 {{- $_ := set $envAll.Values "__mechanism_drivers" $__mechanism_drivers }}
 {{- end -}}
-{{- set $envAll.Values.conf.plugins.ml2_conf.ml2 "mechanism_drivers" $envAll.Values.__mechanism_drivers | quote | trunc 0 -}}
+{{- $_ := set $envAll.Values.conf.plugins.ml2_conf.ml2 "mechanism_drivers" $envAll.Values.__mechanism_drivers -}}
 {{- end -}}
 
 {{- if empty .Values.conf.neutron.DEFAULT.bind_port -}}
-{{- tuple "network" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" | set .Values.conf.neutron.DEFAULT "bind_port" | quote | trunc 0 -}}
+{{- $_ := tuple "network" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" | set .Values.conf.neutron.DEFAULT "bind_port" -}}
 {{- end -}}
 
+{{- if and (empty .Values.conf.logging.handler_fluent) (has "fluent" .Values.conf.logging.handlers.keys) -}}
+{{- $fluentd_host := tuple "fluentd" "internal" $envAll | include "helm-toolkit.endpoints.hostname_namespaced_endpoint_lookup" }}
+{{- $fluentd_port := tuple "fluentd" "internal" "service" $envAll | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+{{- $fluent_args := printf "('%s.%s', '%s', %s)" .Release.Namespace .Release.Name $fluentd_host $fluentd_port }}
+{{- $handler_fluent := dict "class" "fluent.handler.FluentHandler" "formatter" "fluent" "args" $fluent_args -}}
+{{- $_ := set .Values.conf.logging "handler_fluent" $handler_fluent -}}
+{{- end -}}
+
+{{- if and (empty .Values.conf.logging.formatter_fluent) (has "fluent" .Values.conf.logging.formatters.keys) -}}
+{{- $formatter_fluent := dict "class" "oslo_log.formatters.FluentFormatter" -}}
+{{- $_ := set .Values.conf.logging "formatter_fluent" $formatter_fluent -}}
+{{- end -}}
 {{- if empty .Values.conf.plugins.opencontrail.KEYSTONE.auth_url -}}
 {{- tuple "identity" "internal" "admin" . | include "helm-toolkit.endpoints.keystone_endpoint_uri_lookup" | set .Values.conf.plugins.opencontrail.KEYSTONE "auth_url" | quote | trunc 0 -}}
 {{- end -}}
@@ -163,49 +185,34 @@ limitations under the License.
 
 ---
 apiVersion: v1
-kind: ConfigMap
+kind: Secret
 metadata:
   name: {{ $configMapName }}
+type: Opaque
 data:
-  rally_tests.yaml: |
-{{ toYaml $envAll.Values.conf.rally_tests.tests | indent 4 }}
-  api-paste.ini: |
-{{ include "helm-toolkit.utils.to_ini" $envAll.Values.conf.paste | indent 4 }}
-  policy.json: |
-{{ toJson $envAll.Values.conf.policy | indent 4 }}
-  neutron.conf: |
-{{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.neutron | indent 4 }}
-  dhcp_agent.ini: |
-{{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.dhcp_agent | indent 4 }}
-  l3_agent.ini: |
-{{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.l3_agent | indent 4 }}
-  metadata_agent.ini: |
-{{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.metadata_agent | indent 4 }}
-  metering_agent.ini: |
-{{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.metering_agent | indent 4 }}
-  ml2_conf.ini: |
-{{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.plugins.ml2_conf | indent 4 }}
-  ml2_conf_sriov.ini: |
-{{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.plugins.ml2_conf_sriov | indent 4 }}
-  macvtap_agent.ini: |
-{{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.plugins.macvtap_agent | indent 4 }}
-  linuxbridge_agent.ini: |
-{{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.plugins.linuxbridge_agent | indent 4 }}
-  openvswitch_agent.ini: |
-{{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.plugins.openvswitch_agent | indent 4 }}
-  sriov_agent.ini: |
-{{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.plugins.sriov_agent | indent 4 }}
-  ContrailPlugin.ini: |
-{{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.plugins.opencontrail | indent 4 }}
+  rally_tests.yaml: {{ toYaml $envAll.Values.conf.rally_tests.tests | b64enc }}
+  api-paste.ini: {{ include "helm-toolkit.utils.to_ini" $envAll.Values.conf.paste | b64enc }}
+  policy.json: {{ toJson $envAll.Values.conf.policy | b64enc }}
+  neutron.conf: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.neutron | b64enc }}
+  logging.conf: {{ include "helm-toolkit.utils.to_oslo_conf" .Values.conf.logging | b64enc }}
+  dhcp_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.dhcp_agent | b64enc }}
+  l3_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.l3_agent | b64enc }}
+  metadata_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.metadata_agent | b64enc }}
+  metering_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.metering_agent | b64enc }}
+  taas_plugin.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.taas_plugin | b64enc }}
+  ml2_conf.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.plugins.ml2_conf | b64enc }}
+  ml2_conf_sriov.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.plugins.ml2_conf_sriov | b64enc }}
+  taas.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.plugins.taas | b64enc }}
+  macvtap_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.plugins.macvtap_agent | b64enc }}
+  linuxbridge_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.plugins.linuxbridge_agent | b64enc }}
+  openvswitch_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.plugins.openvswitch_agent | b64enc }}
+  sriov_agent.ini: {{ include "helm-toolkit.utils.to_oslo_conf" $envAll.Values.conf.plugins.sriov_agent | b64enc }}
   dnsmasq.conf: ""
-  neutron_sudoers: |
-{{ $envAll.Values.conf.neutron_sudoers | indent 4 }}
-  rootwrap.conf: |
-{{ $envAll.Values.conf.rootwrap | indent 4 }}
+  neutron_sudoers: {{ $envAll.Values.conf.neutron_sudoers | b64enc }}
+  rootwrap.conf: {{ $envAll.Values.conf.rootwrap | b64enc }}
 {{- range $key, $value := $envAll.Values.conf.rootwrap_filters }}
 {{- $filePrefix := replace "_" "-"  $key }}
-  {{ printf "%s.filters" $filePrefix }}: |
-{{ $value.content | indent 4 }}
+  {{ printf "%s.filters" $filePrefix }}: {{ $value.content | b64enc }}
 {{- end }}
 {{- end }}
 {{- end }}

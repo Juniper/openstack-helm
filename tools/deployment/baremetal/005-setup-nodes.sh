@@ -16,19 +16,24 @@
 
 set -xe
 
-#NOTE: We only want to run control plane components on the primary node
-kubectl label nodes openstack-control-plane- --all --overwrite
-PRIMARY_NODE="$(kubectl get nodes -l openstack-helm-node-class=primary -o name | awk -F '/' '{ print $NF; exit }')"
-kubectl label node ${PRIMARY_NODE} openstack-control-plane=enabled
+#NOTE: We only want to run ceph and control plane components on the primary node
+for LABEL in openstack-control-plane ceph-osd ceph-mon ceph-mds ceph-rgw ceph-mgr; do
+  kubectl label nodes ${LABEL}- --all --overwrite
+  PRIMARY_NODE="$(kubectl get nodes -l openstack-helm-node-class=primary -o name | awk -F '/' '{ print $NF; exit }')"
+  kubectl label node ${PRIMARY_NODE} ${LABEL}=enabled
+done
 
 #NOTE: Build charts
 make all
 
 #NOTE: Deploy libvirt with vbmc then define domains to use as baremetal nodes
-helm install ./libvirt \
+: ${OSH_INFRA_PATH:="../openstack-helm-infra"}
+make -C ${OSH_INFRA_PATH} libvirt
+helm install ${OSH_INFRA_PATH}/libvirt \
   --namespace=libvirt \
   --name=libvirt \
-  --set ceph.enabled=false \
+  --set network.backend=null \
+  --set conf.ceph.enabled=false \
   --set images.tags.libvirt=docker.io/openstackhelm/vbmc:centos
 
 #NOTE: Wait for deploy
@@ -65,7 +70,10 @@ for LIBVIRT_POD in ${LIBVIRT_PODS}; do
 done
 
 #NOTE: Deploy OvS to connect nodes to the deployment host
-helm install ./openvswitch \
+: ${OSH_INFRA_PATH:="../openstack-helm-infra"}
+make -C ${OSH_INFRA_PATH} openvswitch
+
+helm install ${OSH_INFRA_PATH}/openvswitch \
   --namespace=openstack \
   --name=openvswitch
 

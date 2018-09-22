@@ -23,6 +23,10 @@ kind: ConfigMap
 metadata:
   name: nova-bin
 data:
+{{- if .Values.images.local_registry.active }}
+  image-repo-sync.sh: |
+{{- include "helm-toolkit.scripts.image_repo_sync" . | indent 4 }}
+{{- end }}
 {{- if .Values.bootstrap.enabled }}
   bootstrap.sh: |
 {{ tuple "bin/_bootstrap.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
@@ -41,9 +45,11 @@ data:
 {{- include "helm-toolkit.scripts.keystone_endpoints" . | indent 4 }}
   ks-user.sh: |
 {{- include "helm-toolkit.scripts.keystone_user" . | indent 4 }}
-{{- if .Values.ceph.enabled }}
+{{- if .Values.conf.ceph.enabled }}
   ceph-keyring.sh: |
 {{ tuple "bin/_ceph-keyring.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  ceph-admin-keyring.sh: |
+{{ tuple "bin/_ceph-admin-keyring.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
 {{- end }}
   nova-api.sh: |
 {{ tuple "bin/_nova-api.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
@@ -79,6 +85,10 @@ data:
 {{ tuple "bin/_ssh-start.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   cell-setup.sh: |
 {{ tuple "bin/_cell-setup.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  cell-setup-init.sh: |
+{{ tuple "bin/_cell-setup-init.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
+  nova-service-cleaner.sh: |
+{{ tuple "bin/_nova-service-cleaner.sh.tpl" . | include "helm-toolkit.utils.template" | indent 4 }}
   rabbit-init.sh: |
 {{- include "helm-toolkit.scripts.rabbit_init" . | indent 4 }}
 {{- if .Values.compute_patch }}

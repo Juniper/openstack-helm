@@ -67,13 +67,14 @@ images:
     bootstrap: docker.io/openstackhelm/heat:newton
     db_drop: docker.io/openstackhelm/heat:newton
     db_init: docker.io/openstackhelm/heat:newton
-    dep_check: 'quay.io/stackanetes/kubernetes-entrypoint:v0.3.0'
+    dep_check: 'quay.io/stackanetes/kubernetes-entrypoint:v0.3.1'
     rabbit_init: docker.io/rabbitmq:3.7-management
     ks_user: docker.io/openstackhelm/heat:newton
     ks_service: docker.io/openstackhelm/heat:newton
     ks_endpoints: docker.io/openstackhelm/heat:newton
     nova_api: docker.io/openstackhelm/nova:newton
     nova_cell_setup: docker.io/openstackhelm/nova:newton
+    nova_cell_setup_init: docker.io/openstackhelm/heat:newton
     nova_compute: docker.io/openstackhelm/nova:newton
     nova_compute_ironic: 'docker.io/kolla/ubuntu-source-nova-compute-ironic:3.0.3'
     nova_compute_ssh: docker.io/openstackhelm/nova:newton
@@ -84,10 +85,33 @@ images:
     nova_novncproxy_assets: 'docker.io/kolla/ubuntu-source-nova-novncproxy:3.0.3'
     nova_placement: docker.io/openstackhelm/nova:newton
     nova_scheduler: docker.io/openstackhelm/nova:newton
+    # NOTE(portdirect): we simply use the ceph config helper here,
+    # as it has both oscli and jq.
+    nova_service_cleaner: 'docker.io/port/ceph-config-helper:v1.10.3'
     nova_spiceproxy: docker.io/openstackhelm/nova:newton
     nova_spiceproxy_assets: 'docker.io/kolla/ubuntu-source-nova-spicehtml5proxy:3.0.3'
     test: 'docker.io/kolla/ubuntu-source-rally:4.0.0'
+    image_repo_sync: docker.io/docker:17.07.0
     opencontrail_compute_init:
+  local_registry:
+    active: false
+    exclude:
+      - dep_check
+      - image_repo_sync
+
+jobs:
+  # NOTE(portdirect): When using cells new nodes will be added to the cell on the hour by default.
+  # TODO(portdirect): Add a post-start action to nova compute pods that registers themselves.
+  cell_setup:
+    cron: "0 */1 * * *"
+    history:
+      success: 3
+      failed: 1
+  service_cleaner:
+    cron: "0 */1 * * *"
+    history:
+      success: 3
+      failed: 1
 
 bootstrap:
   enabled: true
@@ -190,32 +214,35 @@ network:
     name: "nova-ssh"
     port: 8022
 
-ceph:
-  enabled: true
-  monitors: []
-  cinder_user: "admin"
-  cinder_keyring: null
-  secret_uuid: 457eb676-33da-42ec-9a8c-9293d545c337
-
 dependencies:
   dynamic:
+    common:
+      local_image_registry:
+        jobs:
+          - nova-image-repo-sync
+        services:
+          - endpoint: node
+            service: local_image_registry
     targeted:
       openvswitch:
         compute:
           pod:
-            - labels:
+            - requireSameNode: true
+              labels:
                 application: neutron
                 component: neutron-ovs-agent
       linuxbridge:
         compute:
           pod:
-            - labels:
+            - requireSameNode: true
+              labels:
                 application: neutron
                 component: neutron-lb-agent
       sriov:
         compute:
           pod:
-            - labels:
+            - requireSameNode: true
+              labels:
                 application: neutron
                 component: neutron-sriov-agent
   static:
@@ -253,11 +280,30 @@ dependencies:
           service: identity
         - endpoint: internal
           service: compute
+      pod:
+        - requireSameNode: false
+          labels:
+            application: nova
+            component: compute
+    service_cleaner:
+      jobs:
+        - nova-db-sync
+        - nova-rabbit-init
+      services:
+        - endpoint: internal
+          service: oslo_messaging
+        - endpoint: internal
+          service: oslo_db
+        - endpoint: internal
+          service: identity
+        - endpoint: internal
+          service: compute
     compute:
       pod:
-        - labels:
-          application: libvirt
-          component: libvirt
+        - requireSameNode: true
+          labels:
+            application: libvirt
+            component: libvirt
       jobs:
         - nova-db-sync
         - nova-rabbit-init
@@ -370,6 +416,10 @@ dependencies:
           service: compute
         - endpoint: internal
           service: network
+    image_repo_sync:
+      services:
+        - endpoint: internal
+          service: local_image_registry
 
 console:
   # serial | spice | novnc | none
@@ -397,10 +447,23 @@ ssh:
     - ecdsa
     - ed25519
 
+ceph_client:
+  configmap: ceph-etc
+  user_secret_name: pvc-ceph-client-key
+
 conf:
-  ssh:
-    override:
-    append:
+  ceph:
+    enabled: true
+    admin_keyring: null
+    cinder:
+      user: "cinder"
+      keyring: null
+      secret_uuid: 457eb676-33da-42ec-9a8c-9293d545c337
+  ssh: |
+    Host *
+      StrictHostKeyChecking no
+      UserKnownHostsFile /dev/null
+      Port {{ .Values.network.ssh.port }}
   rally_tests:
     run_tempest: false
     tests:
@@ -964,31 +1027,461 @@ conf:
     os_compute_api:os-volumes-attachments:discoverable: "@"
     os_compute_api:os-volumes-attachments:update: rule:admin_api
     os_compute_api:os-volumes-attachments:delete: rule:admin_or_owner
-  nova_sudoers:
-    override:
-    append:
-  rootwrap:
-    override:
-    append:
-  wsgi_placement:
-    override:
-    append:
+  nova_sudoers: |
+    # This sudoers file supports rootwrap for both Kolla and LOCI Images.
+    Defaults !requiretty
+    Defaults secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:/var/lib/openstack/bin:/var/lib/kolla/venv/bin"
+    nova ALL = (root) NOPASSWD: /var/lib/kolla/venv/bin/nova-rootwrap /etc/nova/rootwrap.conf *, /var/lib/openstack/bin/nova-rootwrap /etc/nova/rootwrap.conf *
+  rootwrap: |
+    # Configuration for nova-rootwrap
+    # This file should be owned by (and only-writeable by) the root user
+
+    [DEFAULT]
+    # List of directories to load filter definitions from (separated by ',').
+    # These directories MUST all be only writeable by root !
+    filters_path=/etc/nova/rootwrap.d,/usr/share/nova/rootwrap
+
+    # List of directories to search executables in, in case filters do not
+    # explicitely specify a full path (separated by ',')
+    # If not specified, defaults to system PATH environment variable.
+    # These directories MUST all be only writeable by root !
+    exec_dirs=/sbin,/usr/sbin,/bin,/usr/bin,/usr/local/bin,/usr/local/sbin,/var/lib/openstack/bin,/var/lib/kolla/venv/bin
+
+    # Enable logging to syslog
+    # Default value is False
+    use_syslog=False
+
+    # Which syslog facility to use.
+    # Valid values include auth, authpriv, syslog, local0, local1...
+    # Default value is 'syslog'
+    syslog_log_facility=syslog
+
+    # Which messages to log.
+    # INFO means log all usage
+    # ERROR means only log unsuccessful attempts
+    syslog_log_level=ERROR
+  wsgi_placement: |
+    Listen 0.0.0.0:{{ tuple "placement" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}
+
+    LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" combined
+    LogFormat "%{X-Forwarded-For}i %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"" proxy
+
+    SetEnvIf X-Forwarded-For "^.*\..*\..*\..*" forwarded
+    CustomLog /dev/stdout combined env=!forwarded
+    CustomLog /dev/stdout proxy env=forwarded
+
+    <VirtualHost *:{{ tuple "placement" "internal" "api" . | include "helm-toolkit.endpoints.endpoint_port_lookup" }}>
+        WSGIDaemonProcess placement-api processes=1 threads=4 user=nova group=nova display-name=%{GROUP}
+        WSGIProcessGroup placement-api
+        WSGIScriptAlias / /var/www/cgi-bin/nova/nova-placement-api
+        WSGIApplicationGroup %{GLOBAL}
+        WSGIPassAuthorization On
+        <IfVersion >= 2.4>
+          ErrorLogFormat "%{cu}t %M"
+        </IfVersion>
+        ErrorLog /dev/stdout
+
+        SetEnvIf X-Forwarded-For "^.*\..*\..*\..*" forwarded
+        CustomLog /dev/stdout combined env=!forwarded
+        CustomLog /dev/stdout proxy env=forwarded
+    </VirtualHost>
+
+    Alias /placement /var/www/cgi-bin/nova/nova-placement-api
+    <Location /placement>
+        SetHandler wsgi-script
+        Options +ExecCGI
+
+        WSGIProcessGroup placement-api
+        WSGIApplicationGroup %{GLOBAL}
+        WSGIPassAuthorization On
+    </Location>
   rootwrap_filters:
     api_metadata:
-      override:
-      append:
+      pods:
+        - metadata
+      content: |
+        # nova-rootwrap command filters for api-metadata nodes
+        # This is needed on nova-api hosts running with "metadata" in enabled_apis
+        # or when running nova-api-metadata
+        # This file should be owned by (and only-writeable by) the root user
+
+        [Filters]
+        # nova/network/linux_net.py: 'ip[6]tables-save' % (cmd, '-t', ...
+        iptables-save: CommandFilter, iptables-save, root
+        ip6tables-save: CommandFilter, ip6tables-save, root
+
+        # nova/network/linux_net.py: 'ip[6]tables-restore' % (cmd,)
+        iptables-restore: CommandFilter, iptables-restore, root
+        ip6tables-restore: CommandFilter, ip6tables-restore, root
     compute:
-      override:
-      append:
+      pods:
+        - compute
+      content: |
+        # nova-rootwrap command filters for compute nodes
+        # This file should be owned by (and only-writeable by) the root user
+
+        [Filters]
+        # nova/virt/disk/mount/api.py: 'kpartx', '-a', device
+        # nova/virt/disk/mount/api.py: 'kpartx', '-d', device
+        kpartx: CommandFilter, kpartx, root
+
+        # nova/virt/xenapi/vm_utils.py: tune2fs, -O ^has_journal, part_path
+        # nova/virt/xenapi/vm_utils.py: tune2fs, -j, partition_path
+        tune2fs: CommandFilter, tune2fs, root
+
+        # nova/virt/disk/mount/api.py: 'mount', mapped_device
+        # nova/virt/disk/api.py: 'mount', '-o', 'bind', src, target
+        # nova/virt/xenapi/vm_utils.py: 'mount', '-t', 'ext2,ext3,ext4,reiserfs'..
+        # nova/virt/configdrive.py: 'mount', device, mountdir
+        # nova/virt/libvirt/volume.py: 'mount', '-t', 'sofs' ...
+        mount: CommandFilter, mount, root
+
+        # nova/virt/disk/mount/api.py: 'umount', mapped_device
+        # nova/virt/disk/api.py: 'umount' target
+        # nova/virt/xenapi/vm_utils.py: 'umount', dev_path
+        # nova/virt/configdrive.py: 'umount', mountdir
+        umount: CommandFilter, umount, root
+
+        # nova/virt/disk/mount/nbd.py: 'qemu-nbd', '-c', device, image
+        # nova/virt/disk/mount/nbd.py: 'qemu-nbd', '-d', device
+        qemu-nbd: CommandFilter, qemu-nbd, root
+
+        # nova/virt/disk/mount/loop.py: 'losetup', '--find', '--show', image
+        # nova/virt/disk/mount/loop.py: 'losetup', '--detach', device
+        losetup: CommandFilter, losetup, root
+
+        # nova/virt/disk/vfs/localfs.py: 'blkid', '-o', 'value', '-s', 'TYPE', device
+        blkid: CommandFilter, blkid, root
+
+        # nova/virt/libvirt/utils.py: 'blockdev', '--getsize64', path
+        # nova/virt/disk/mount/nbd.py: 'blockdev', '--flushbufs', device
+        blockdev: RegExpFilter, blockdev, root, blockdev, (--getsize64|--flushbufs), /dev/.*
+
+        # nova/virt/disk/vfs/localfs.py: 'tee', canonpath
+        tee: CommandFilter, tee, root
+
+        # nova/virt/disk/vfs/localfs.py: 'mkdir', canonpath
+        mkdir: CommandFilter, mkdir, root
+
+        # nova/virt/disk/vfs/localfs.py: 'chown'
+        # nova/virt/libvirt/connection.py: 'chown', os.getuid( console_log
+        # nova/virt/libvirt/connection.py: 'chown', os.getuid( console_log
+        # nova/virt/libvirt/connection.py: 'chown', 'root', basepath('disk')
+        chown: CommandFilter, chown, root
+
+        # nova/virt/disk/vfs/localfs.py: 'chmod'
+        chmod: CommandFilter, chmod, root
+
+        # nova/virt/libvirt/vif.py: 'ip', 'tuntap', 'add', dev, 'mode', 'tap'
+        # nova/virt/libvirt/vif.py: 'ip', 'link', 'set', dev, 'up'
+        # nova/virt/libvirt/vif.py: 'ip', 'link', 'delete', dev
+        # nova/network/linux_net.py: 'ip', 'addr', 'add', str(floating_ip)+'/32'i..
+        # nova/network/linux_net.py: 'ip', 'addr', 'del', str(floating_ip)+'/32'..
+        # nova/network/linux_net.py: 'ip', 'addr', 'add', '169.254.169.254/32',..
+        # nova/network/linux_net.py: 'ip', 'addr', 'show', 'dev', dev, 'scope',..
+        # nova/network/linux_net.py: 'ip', 'addr', 'del/add', ip_params, dev)
+        # nova/network/linux_net.py: 'ip', 'addr', 'del', params, fields[-1]
+        # nova/network/linux_net.py: 'ip', 'addr', 'add', params, bridge
+        # nova/network/linux_net.py: 'ip', '-f', 'inet6', 'addr', 'change', ..
+        # nova/network/linux_net.py: 'ip', 'link', 'set', 'dev', dev, 'promisc',..
+        # nova/network/linux_net.py: 'ip', 'link', 'add', 'link', bridge_if ...
+        # nova/network/linux_net.py: 'ip', 'link', 'set', interface, address,..
+        # nova/network/linux_net.py: 'ip', 'link', 'set', interface, 'up'
+        # nova/network/linux_net.py: 'ip', 'link', 'set', bridge, 'up'
+        # nova/network/linux_net.py: 'ip', 'addr', 'show', 'dev', interface, ..
+        # nova/network/linux_net.py: 'ip', 'link', 'set', dev, address, ..
+        # nova/network/linux_net.py: 'ip', 'link', 'set', dev, 'up'
+        # nova/network/linux_net.py: 'ip', 'route', 'add', ..
+        # nova/network/linux_net.py: 'ip', 'route', 'del', .
+        # nova/network/linux_net.py: 'ip', 'route', 'show', 'dev', dev
+        ip: CommandFilter, ip, root
+
+        # nova/virt/libvirt/vif.py: 'tunctl', '-b', '-t', dev
+        # nova/network/linux_net.py: 'tunctl', '-b', '-t', dev
+        tunctl: CommandFilter, tunctl, root
+
+        # nova/virt/libvirt/vif.py: 'ovs-vsctl', ...
+        # nova/virt/libvirt/vif.py: 'ovs-vsctl', 'del-port', ...
+        # nova/network/linux_net.py: 'ovs-vsctl', ....
+        ovs-vsctl: CommandFilter, ovs-vsctl, root
+
+        # nova/virt/libvirt/vif.py: 'vrouter-port-control', ...
+        vrouter-port-control: CommandFilter, vrouter-port-control, root
+
+        # nova/virt/libvirt/vif.py: 'ebrctl', ...
+        ebrctl: CommandFilter, ebrctl, root
+
+        # nova/virt/libvirt/vif.py: 'mm-ctl', ...
+        mm-ctl: CommandFilter, mm-ctl, root
+
+        # nova/network/linux_net.py: 'ovs-ofctl', ....
+        ovs-ofctl: CommandFilter, ovs-ofctl, root
+
+        # nova/virt/libvirt/connection.py: 'dd', if=%s % virsh_output, ...
+        dd: CommandFilter, dd, root
+
+        # nova/virt/xenapi/volume_utils.py: 'iscsiadm', '-m', ...
+        iscsiadm: CommandFilter, iscsiadm, root
+
+        # nova/virt/libvirt/volume/aoe.py: 'aoe-revalidate', aoedev
+        # nova/virt/libvirt/volume/aoe.py: 'aoe-discover'
+        aoe-revalidate: CommandFilter, aoe-revalidate, root
+        aoe-discover: CommandFilter, aoe-discover, root
+
+        # nova/virt/xenapi/vm_utils.py: parted, --script, ...
+        # nova/virt/xenapi/vm_utils.py: 'parted', '--script', dev_path, ..*.
+        parted: CommandFilter, parted, root
+
+        # nova/virt/xenapi/vm_utils.py: 'pygrub', '-qn', dev_path
+        pygrub: CommandFilter, pygrub, root
+
+        # nova/virt/xenapi/vm_utils.py: fdisk %(dev_path)s
+        fdisk: CommandFilter, fdisk, root
+
+        # nova/virt/xenapi/vm_utils.py: e2fsck, -f, -p, partition_path
+        # nova/virt/disk/api.py: e2fsck, -f, -p, image
+        e2fsck: CommandFilter, e2fsck, root
+
+        # nova/virt/xenapi/vm_utils.py: resize2fs, partition_path
+        # nova/virt/disk/api.py: resize2fs, image
+        resize2fs: CommandFilter, resize2fs, root
+
+        # nova/network/linux_net.py: 'ip[6]tables-save' % (cmd, '-t', ...
+        iptables-save: CommandFilter, iptables-save, root
+        ip6tables-save: CommandFilter, ip6tables-save, root
+
+        # nova/network/linux_net.py: 'ip[6]tables-restore' % (cmd,)
+        iptables-restore: CommandFilter, iptables-restore, root
+        ip6tables-restore: CommandFilter, ip6tables-restore, root
+
+        # nova/network/linux_net.py: 'arping', '-U', floating_ip, '-A', '-I', ...
+        # nova/network/linux_net.py: 'arping', '-U', network_ref['dhcp_server'],..
+        arping: CommandFilter, arping, root
+
+        # nova/network/linux_net.py: 'dhcp_release', dev, address, mac_address
+        dhcp_release: CommandFilter, dhcp_release, root
+
+        # nova/network/linux_net.py: 'kill', '-9', pid
+        # nova/network/linux_net.py: 'kill', '-HUP', pid
+        kill_dnsmasq: KillFilter, root, /usr/sbin/dnsmasq, -9, -HUP
+
+        # nova/network/linux_net.py: 'kill', pid
+        kill_radvd: KillFilter, root, /usr/sbin/radvd
+
+        # nova/network/linux_net.py: dnsmasq call
+        dnsmasq: EnvFilter, env, root, CONFIG_FILE=, NETWORK_ID=, dnsmasq
+
+        # nova/network/linux_net.py: 'radvd', '-C', '%s' % _ra_file(dev, 'conf'..
+        radvd: CommandFilter, radvd, root
+
+        # nova/network/linux_net.py: 'brctl', 'addbr', bridge
+        # nova/network/linux_net.py: 'brctl', 'setfd', bridge, 0
+        # nova/network/linux_net.py: 'brctl', 'stp', bridge, 'off'
+        # nova/network/linux_net.py: 'brctl', 'addif', bridge, interface
+        brctl: CommandFilter, brctl, root
+
+        # nova/virt/libvirt/utils.py: 'mkswap'
+        # nova/virt/xenapi/vm_utils.py: 'mkswap'
+        mkswap: CommandFilter, mkswap, root
+
+        # nova/virt/libvirt/utils.py: 'nova-idmapshift'
+        nova-idmapshift: CommandFilter, nova-idmapshift, root
+
+        # nova/virt/xenapi/vm_utils.py: 'mkfs'
+        # nova/utils.py: 'mkfs', fs, path, label
+        mkfs: CommandFilter, mkfs, root
+
+        # nova/virt/libvirt/utils.py: 'qemu-img'
+        qemu-img: CommandFilter, qemu-img, root
+
+        # nova/virt/disk/vfs/localfs.py: 'readlink', '-e'
+        readlink: CommandFilter, readlink, root
+
+        # nova/virt/disk/api.py:
+        mkfs.ext3: CommandFilter, mkfs.ext3, root
+        mkfs.ext4: CommandFilter, mkfs.ext4, root
+        mkfs.ntfs: CommandFilter, mkfs.ntfs, root
+
+        # nova/virt/libvirt/connection.py:
+        lvremove: CommandFilter, lvremove, root
+
+        # nova/virt/libvirt/utils.py:
+        lvcreate: CommandFilter, lvcreate, root
+
+        # nova/virt/libvirt/utils.py:
+        lvs: CommandFilter, lvs, root
+
+        # nova/virt/libvirt/utils.py:
+        vgs: CommandFilter, vgs, root
+
+        # nova/utils.py:read_file_as_root: 'cat', file_path
+        # (called from nova/virt/disk/vfs/localfs.py:VFSLocalFS.read_file)
+        read_passwd: RegExpFilter, cat, root, cat, (/var|/usr)?/tmp/openstack-vfs-localfs[^/]+/etc/passwd
+        read_shadow: RegExpFilter, cat, root, cat, (/var|/usr)?/tmp/openstack-vfs-localfs[^/]+/etc/shadow
+
+        # os-brick needed commands
+        read_initiator: ReadFileFilter, /etc/iscsi/initiatorname.iscsi
+        multipath: CommandFilter, multipath, root
+        # multipathd show status
+        multipathd: CommandFilter, multipathd, root
+        systool: CommandFilter, systool, root
+        vgc-cluster: CommandFilter, vgc-cluster, root
+        # os_brick/initiator/connector.py
+        drv_cfg: CommandFilter, /opt/emc/scaleio/sdc/bin/drv_cfg, root, /opt/emc/scaleio/sdc/bin/drv_cfg, --query_guid
+
+        # TODO(smcginnis) Temporary fix.
+        # Need to pull in os-brick os-brick.filters file instead and clean
+        # out stale brick values from this file.
+        scsi_id: CommandFilter, /lib/udev/scsi_id, root
+        # os_brick.privileged.default oslo.privsep context
+        # This line ties the superuser privs with the config files, context name,
+        # and (implicitly) the actual python code invoked.
+        privsep-rootwrap: RegExpFilter, privsep-helper, root, privsep-helper, --config-file, /etc/(?!\.\.).*, --privsep_context, os_brick.privileged.default, --privsep_sock_path, /tmp/.*
+
+        # nova/storage/linuxscsi.py: sg_scan device
+        sg_scan: CommandFilter, sg_scan, root
+
+        # nova/volume/encryptors/cryptsetup.py:
+        # nova/volume/encryptors/luks.py:
+        ln: RegExpFilter, ln, root, ln, --symbolic, --force, /dev/mapper/crypt-.+, .+
+
+        # nova/volume/encryptors.py:
+        # nova/virt/libvirt/dmcrypt.py:
+        cryptsetup: CommandFilter, cryptsetup, root
+
+        # nova/virt/xenapi/vm_utils.py:
+        xenstore-read: CommandFilter, xenstore-read, root
+
+        # nova/virt/libvirt/utils.py:
+        rbd: CommandFilter, rbd, root
+
+        # nova/virt/libvirt/utils.py: 'shred', '-n3', '-s%d' % volume_size, path
+        shred: CommandFilter, shred, root
+
+        # nova/virt/libvirt/volume.py: 'cp', '/dev/stdin', delete_control..
+        cp: CommandFilter, cp, root
+
+        # nova/virt/xenapi/vm_utils.py:
+        sync: CommandFilter, sync, root
+
+        # nova/virt/libvirt/imagebackend.py:
+        ploop: RegExpFilter, ploop, root, ploop, restore-descriptor, .*
+        prl_disk_tool: RegExpFilter, prl_disk_tool, root, prl_disk_tool, resize, --size, .*M$, --resize_partition, --hdd, .*
+
+        # nova/virt/libvirt/utils.py: 'xend', 'status'
+        xend: CommandFilter, xend, root
+
+        # nova/virt/libvirt/utils.py:
+        touch: CommandFilter, touch, root
+
+        # nova/virt/libvirt/volume/vzstorage.py
+        pstorage-mount: CommandFilter, pstorage-mount, root
     network:
-      override:
-      append:
+      pods:
+        - compute
+      content: |
+        # nova-rootwrap command filters for network nodes
+        # This file should be owned by (and only-writeable by) the root user
+
+        [Filters]
+        # nova/virt/libvirt/vif.py: 'ip', 'tuntap', 'add', dev, 'mode', 'tap'
+        # nova/virt/libvirt/vif.py: 'ip', 'link', 'set', dev, 'up'
+        # nova/virt/libvirt/vif.py: 'ip', 'link', 'delete', dev
+        # nova/network/linux_net.py: 'ip', 'addr', 'add', str(floating_ip)+'/32'i..
+        # nova/network/linux_net.py: 'ip', 'addr', 'del', str(floating_ip)+'/32'..
+        # nova/network/linux_net.py: 'ip', 'addr', 'add', '169.254.169.254/32',..
+        # nova/network/linux_net.py: 'ip', 'addr', 'show', 'dev', dev, 'scope',..
+        # nova/network/linux_net.py: 'ip', 'addr', 'del/add', ip_params, dev)
+        # nova/network/linux_net.py: 'ip', 'addr', 'del', params, fields[-1]
+        # nova/network/linux_net.py: 'ip', 'addr', 'add', params, bridge
+        # nova/network/linux_net.py: 'ip', '-f', 'inet6', 'addr', 'change', ..
+        # nova/network/linux_net.py: 'ip', 'link', 'set', 'dev', dev, 'promisc',..
+        # nova/network/linux_net.py: 'ip', 'link', 'add', 'link', bridge_if ...
+        # nova/network/linux_net.py: 'ip', 'link', 'set', interface, address,..
+        # nova/network/linux_net.py: 'ip', 'link', 'set', interface, 'up'
+        # nova/network/linux_net.py: 'ip', 'link', 'set', bridge, 'up'
+        # nova/network/linux_net.py: 'ip', 'addr', 'show', 'dev', interface, ..
+        # nova/network/linux_net.py: 'ip', 'link', 'set', dev, address, ..
+        # nova/network/linux_net.py: 'ip', 'link', 'set', dev, 'up'
+        # nova/network/linux_net.py: 'ip', 'route', 'add', ..
+        # nova/network/linux_net.py: 'ip', 'route', 'del', .
+        # nova/network/linux_net.py: 'ip', 'route', 'show', 'dev', dev
+        ip: CommandFilter, ip, root
+
+        # nova/virt/libvirt/vif.py: 'ovs-vsctl', ...
+        # nova/virt/libvirt/vif.py: 'ovs-vsctl', 'del-port', ...
+        # nova/network/linux_net.py: 'ovs-vsctl', ....
+        ovs-vsctl: CommandFilter, ovs-vsctl, root
+
+        # nova/network/linux_net.py: 'ovs-ofctl', ....
+        ovs-ofctl: CommandFilter, ovs-ofctl, root
+
+        # nova/virt/libvirt/vif.py: 'ivs-ctl', ...
+        # nova/virt/libvirt/vif.py: 'ivs-ctl', 'del-port', ...
+        # nova/network/linux_net.py: 'ivs-ctl', ....
+        ivs-ctl: CommandFilter, ivs-ctl, root
+
+        # nova/virt/libvirt/vif.py: 'ifc_ctl', ...
+        ifc_ctl: CommandFilter, /opt/pg/bin/ifc_ctl, root
+
+        # nova/network/linux_net.py: 'ebtables', '-D' ...
+        # nova/network/linux_net.py: 'ebtables', '-I' ...
+        ebtables: CommandFilter, ebtables, root
+        ebtables_usr: CommandFilter, ebtables, root
+
+        # nova/network/linux_net.py: 'ip[6]tables-save' % (cmd, '-t', ...
+        iptables-save: CommandFilter, iptables-save, root
+        ip6tables-save: CommandFilter, ip6tables-save, root
+
+        # nova/network/linux_net.py: 'ip[6]tables-restore' % (cmd,)
+        iptables-restore: CommandFilter, iptables-restore, root
+        ip6tables-restore: CommandFilter, ip6tables-restore, root
+
+        # nova/network/linux_net.py: 'arping', '-U', floating_ip, '-A', '-I', ...
+        # nova/network/linux_net.py: 'arping', '-U', network_ref['dhcp_server'],..
+        arping: CommandFilter, arping, root
+
+        # nova/network/linux_net.py: 'dhcp_release', dev, address, mac_address
+        dhcp_release: CommandFilter, dhcp_release, root
+
+        # nova/network/linux_net.py: 'kill', '-9', pid
+        # nova/network/linux_net.py: 'kill', '-HUP', pid
+        kill_dnsmasq: KillFilter, root, /usr/sbin/dnsmasq, -9, -HUP
+
+        # nova/network/linux_net.py: 'kill', pid
+        kill_radvd: KillFilter, root, /usr/sbin/radvd
+
+        # nova/network/linux_net.py: dnsmasq call
+        dnsmasq: EnvFilter, env, root, CONFIG_FILE=, NETWORK_ID=, dnsmasq
+
+        # nova/network/linux_net.py: 'radvd', '-C', '%s' % _ra_file(dev, 'conf'..
+        radvd: CommandFilter, radvd, root
+
+        # nova/network/linux_net.py: 'brctl', 'addbr', bridge
+        # nova/network/linux_net.py: 'brctl', 'setfd', bridge, 0
+        # nova/network/linux_net.py: 'brctl', 'stp', bridge, 'off'
+        # nova/network/linux_net.py: 'brctl', 'addif', bridge, interface
+        brctl: CommandFilter, brctl, root
+
+        # nova/network/linux_net.py: 'sysctl', ....
+        sysctl: CommandFilter, sysctl, root
+
+        # nova/network/linux_net.py: 'conntrack'
+        conntrack: CommandFilter, conntrack, root
+
+        # nova/network/linux_net.py: 'fp-vdev'
+        fp-vdev: CommandFilter, fp-vdev, root
   nova_ironic:
     DEFAULT:
       scheduler_host_manager: ironic_host_manager
       compute_driver: ironic.IronicDriver
+  libvirt:
+    # Get the IP address to be used as the target for live migration traffic using interface name.
+    # If this option is set to None, the hostname of the migration target compute node will be used.
+    live_migration_interface:
   nova:
     DEFAULT:
+      log_config_append: /etc/nova/logging.conf
       default_ephemeral_format: ext4
       ram_allocation_ratio: 1.0
       disk_allocation_ratio: 1.0
@@ -1013,13 +1506,13 @@ conf:
     vnc:
       novncproxy_host: 0.0.0.0
       vncserver_listen: 0.0.0.0
-      # leave blank, this should be set by each compute nodes's ip
-      vncserver_proxyclient_address: null
+      # This would be set by each compute nodes's ip
+      # vncserver_proxyclient_address: 127.0.0.1
     spice:
       html5proxy_host: 0.0.0.0
       server_listen: 0.0.0.0
-      # leave blank, this should be set by each compute nodes's ip
-      server_proxyclient_address: null
+      # This would be set by each compute nodes's ip
+      # server_proxyclient_address: 127.0.0.1
     conductor:
       workers: 1
     oslo_policy:
@@ -1030,8 +1523,6 @@ conf:
       enable_proxy_headers_parsing: true
     glance:
       num_retries: 3
-    cinder:
-      catalog_info: volumev2:cinder:internalURL
     ironic:
       api_endpoint: null
       auth_url: null
@@ -1055,7 +1546,7 @@ conf:
       images_type: qcow2
       images_rbd_pool: vms
       images_rbd_ceph_conf: /etc/ceph/ceph.conf
-      rbd_user: admin
+      rbd_user: cinder
       rbd_secret_uuid: 457eb676-33da-42ec-9a8c-9293d545c337
       disk_cachemodes: "network=writeback"
       hw_disk_discard: unmap
@@ -1071,6 +1562,78 @@ conf:
     placement:
       auth_type: password
       auth_version: v3
+  logging:
+    loggers:
+      keys:
+        - root
+        - nova
+    handlers:
+      keys:
+        - stdout
+        - stderr
+        - "null"
+    formatters:
+      keys:
+        - context
+        - default
+    logger_root:
+      level: WARNING
+      handlers: 'null'
+    logger_nova:
+      level: INFO
+      handlers:
+        - stdout
+      qualname: nova
+    logger_amqp:
+      level: WARNING
+      handlers: stderr
+      qualname: amqp
+    logger_amqplib:
+      level: WARNING
+      handlers: stderr
+      qualname: amqplib
+    logger_eventletwsgi:
+      level: WARNING
+      handlers: stderr
+      qualname: eventlet.wsgi.server
+    logger_sqlalchemy:
+      level: WARNING
+      handlers: stderr
+      qualname: sqlalchemy
+    logger_boto:
+      level: WARNING
+      handlers: stderr
+      qualname: boto
+    handler_null:
+      class: logging.NullHandler
+      formatter: default
+      args: ()
+    handler_stdout:
+      class: StreamHandler
+      args: (sys.stdout,)
+      formatter: context
+    handler_stderr:
+      class: StreamHandler
+      args: (sys.stderr,)
+      formatter: context
+    formatter_context:
+      class: oslo_log.formatters.ContextFormatter
+    formatter_default:
+      format: "%(message)s"
+  rabbitmq:
+    #NOTE(rk760n): adding rmq policy to mirror messages from notification queues and set expiration time for the ones
+    policies:
+      - vhost: "nova"
+        name: "ha_ttl_nova"
+        definition:
+          #mirror messges to other nodes in rmq cluster
+          ha-mode: "all"
+          ha-sync-mode: "automatic"
+          #70s
+          message-ttl: 70000
+        priority: 0
+        apply-to: all
+        pattern: '(notifications)\.'
 
 # Names of secrets used by bootstrap and environmental checks
 secrets:
@@ -1091,12 +1654,34 @@ secrets:
   oslo_messaging:
     admin: nova-rabbitmq-admin
     nova: nova-rabbitmq-user
+  tls:
+    compute:
+      osapi:
+        public: nova-tls-public
+    compute_novnc_proxy:
+      novncproxy:
+        public: nova-novncproxy-tls-public
+    placement:
+      placement:
+        public: placement-tls-public
 
 # typically overridden by environmental
 # values, but should include all endpoints
 # required by this chart
 endpoints:
   cluster_domain_suffix: cluster.local
+  local_image_registry:
+    name: docker-registry
+    namespace: docker-registry
+    hosts:
+      default: localhost
+      internal: docker-registry
+      node: localhost
+    host_fqdn_override:
+      default: null
+    port:
+      registry:
+        node: 5000
   oslo_db:
     auth:
       admin:
@@ -1160,7 +1745,7 @@ endpoints:
       default: rabbitmq
     host_fqdn_override:
       default: null
-    path: /
+    path: /nova
     scheme: rabbit
     port:
       amqp:
@@ -1198,15 +1783,15 @@ endpoints:
         username: nova
         password: password
         project_name: service
-        user_domain_name: default
-        project_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
       # NOTE(portdirect): the neutron user is not managed by the nova chart
       # these values should match those set in the neutron chart.
       neutron:
         region_name: RegionOne
         project_name: service
-        project_domain_name: default
-        user_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
         username: neutron
         password: password
       # NOTE(portdirect): the ironic user is not managed by the nova chart
@@ -1216,8 +1801,8 @@ endpoints:
         auth_version: v3
         region_name: RegionOne
         project_name: service
-        project_domain_name: default
-        user_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
         username: ironic
         password: password
       placement:
@@ -1226,19 +1811,19 @@ endpoints:
         username: placement
         password: password
         project_name: service
-        user_domain_name: default
-        project_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
       test:
         role: admin
         region_name: RegionOne
         username: test
         password: password
         project_name: test
-        user_domain_name: default
-        project_domain_name: default
+        user_domain_name: service
+        project_domain_name: service
     hosts:
-      default: keystone-api
-      public: keystone
+      default: keystone
+      internal: keystone-api
     host_fqdn_override:
       default: null
     path:
@@ -1246,10 +1831,9 @@ endpoints:
     scheme:
       default: http
     port:
-      admin:
-        default: 35357
       api:
         default: 80
+        internal: 5000
   image:
     name: glance
     hosts:
@@ -1272,6 +1856,13 @@ endpoints:
       public: nova
     host_fqdn_override:
       default: null
+      # NOTE(portdirect): this chart supports TLS for fqdn over-ridden public
+      # endpoints using the following format:
+      # public:
+      #   host: null
+      #   tls:
+      #     crt: null
+      #     key: null
     path:
       default: "/v2.1/%(tenant_id)s"
     scheme:
@@ -1307,6 +1898,13 @@ endpoints:
       public: novncproxy
     host_fqdn_override:
       default: null
+      # NOTE(portdirect): this chart supports TLS for fqdn over-ridden public
+      # endpoints using the following format:
+      # public:
+      #   host: null
+      #   tls:
+      #     crt: null
+      #     key: null
     path:
       default: /vnc_auto.html
     scheme:
@@ -1374,6 +1972,21 @@ endpoints:
       api:
         default: 6385
         public: 80
+  fluentd:
+    namespace: null
+    name: fluentd
+    hosts:
+      default: fluentd-logging
+    host_fqdn_override:
+      default: null
+    path:
+      default: null
+    scheme: 'http'
+    port:
+      service:
+        default: 24224
+      metrics:
+        default: 24220
 
 pod:
   user:
@@ -1610,10 +2223,26 @@ pod:
         limits:
           memory: "1024Mi"
           cpu: "2000m"
+      service_cleaner:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
+      image_repo_sync:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "1024Mi"
+          cpu: "2000m"
 
 manifests:
   configmap_bin: true
   configmap_etc: true
+  cron_job_cell_setup: true
+  cron_job_service_cleaner: true
   daemonset_compute: true
   deployment_api_metadata: true
   deployment_api_osapi: true
@@ -1632,6 +2261,7 @@ manifests:
   job_db_init_placement: true
   job_db_sync: true
   job_db_drop: false
+  job_image_repo_sync: true
   job_rabbit_init: true
   job_ks_endpoints: true
   job_ks_service: true
@@ -1646,6 +2276,7 @@ manifests:
   pod_rally_test: true
   secret_db_api: true
   secret_db: true
+  secret_ingress_tls: true
   secret_keystone: true
   secret_keystone_placement: true
   secret_rabbitmq: true

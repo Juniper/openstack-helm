@@ -16,8 +16,8 @@
 
 set -xe
 
-#NOTE: Pull images and lint chart
-make pull-images glance
+#NOTE: Lint and package chart
+make glance
 
 #NOTE: Deploy command
 OPENSTACK_VERSION=${OPENSTACK_VERSION:-"ocata"}
@@ -27,11 +27,30 @@ else
   values=""
 fi
 : ${OSH_EXTRA_HELM_ARGS:=""}
+: ${OSH_OPENSTACK_RELEASE:="newton"}
 #NOTE(portdirect), this could be: radosgw, rbd, swift or pvc
-: ${GLANCE_BACKEND:="radosgw"}
+: ${GLANCE_BACKEND:="swift"}
+tee /tmp/glance.yaml <<EOF
+storage: ${GLANCE_BACKEND}
+EOF
+if [ "x${OSH_OPENSTACK_RELEASE}" == "xnewton" ]; then
+# NOTE(portdirect): glance APIv1 is required for heat in Newton
+  tee -a /tmp/glance.yaml <<EOF
+conf:
+  glance:
+    DEFAULT:
+      enable_v1_api: true
+      enable_v2_registry: true
+manifests:
+  deployment_registry: true
+  ingress_registry: true
+  pdb_registry: true
+  service_ingress_registry: true
+EOF
+fi
 helm upgrade --install glance ./glance \
-  --namespace=openstack $values\
-  --set storage=${GLANCE_BACKEND} \
+  --namespace=openstack \
+  --values=/tmp/glance.yaml \
   ${OSH_EXTRA_HELM_ARGS} \
   ${OSH_EXTRA_HELM_ARGS_GLANCE}
 

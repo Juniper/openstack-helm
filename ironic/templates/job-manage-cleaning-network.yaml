@@ -16,15 +16,16 @@ limitations under the License.
 
 {{- if .Values.manifests.job_manage_cleaning_network }}
 {{- $envAll := . }}
-{{- $dependencies := .Values.dependencies.static.manage_cleaning_network }}
 
 {{- $serviceAccountName := "ironic-manage-cleaning-network" }}
-{{ tuple $envAll $dependencies $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
+{{ tuple $envAll "manage_cleaning_network" $serviceAccountName | include "helm-toolkit.snippets.kubernetes_pod_rbac_serviceaccount" }}
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: ironic-manage-cleaning-network
+  annotations:
+    {{ tuple $envAll | include "helm-toolkit.snippets.release_uuid" }}
 spec:
   template:
     metadata:
@@ -36,11 +37,10 @@ spec:
       nodeSelector:
         {{ .Values.labels.job.node_selector_key }}: {{ .Values.labels.job.node_selector_value }}
       initContainers:
-{{ tuple $envAll $dependencies list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container"  | indent 8 }}
+{{ tuple $envAll "manage_cleaning_network" list | include "helm-toolkit.snippets.kubernetes_entrypoint_init_container"  | indent 8 }}
       containers:
         - name: ironic-manage-cleaning-network
-          image: {{ .Values.images.tags.ironic_manage_cleaning_network }}
-          imagePullPolicy: {{ .Values.images.pull_policy }}
+{{ tuple $envAll "ironic_manage_cleaning_network" | include "helm-toolkit.snippets.image" | indent 10 }}
 {{ tuple $envAll $envAll.Values.pod.resources.jobs.manage_cleaning_network | include "helm-toolkit.snippets.kubernetes_resources" | indent 10 }}
           env:
 {{- with $env := dict "ksUserSecret" .Values.secrets.identity.ironic }}

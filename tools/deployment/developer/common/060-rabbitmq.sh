@@ -16,12 +16,13 @@
 
 set -xe
 
-#NOTE: Pull images and lint chart
-make pull-images rabbitmq
+#NOTE: Lint and package chart
+: ${OSH_INFRA_PATH:="../openstack-helm-infra"}
+make -C ${OSH_INFRA_PATH} rabbitmq
 
 #NOTE: Deploy command
 : ${OSH_EXTRA_HELM_ARGS:=""}
-helm upgrade --install rabbitmq ./rabbitmq \
+helm upgrade --install rabbitmq ${OSH_INFRA_PATH}/rabbitmq \
     --namespace=openstack \
     --set pod.replicas.server=1 \
     ${OSH_EXTRA_HELM_ARGS} \

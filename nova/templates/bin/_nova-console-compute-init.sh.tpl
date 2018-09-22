@@ -21,7 +21,7 @@ set -ex
 console_kind="{{- .Values.console.console_kind -}}"
 
 if [ "${console_kind}" == "novnc" ] ; then
-    client_address="{{- .Values.conf.nova.vnc.server_proxyclient_address -}}"
+    client_address="{{- .Values.conf.nova.vnc.vncserver_proxyclient_address -}}"
     client_interface="{{- .Values.console.novnc.compute.server_proxyclient_interface -}}"
     listen_ip="{{- .Values.conf.nova.vnc.server_listen -}}"
 elif [ "${console_kind}" == "spice" ] ; then
@@ -37,7 +37,7 @@ if [ -z "${client_address}" ] ; then
     fi
 
     # determine client ip dynamically based on interface provided
-    client_address=$(ip a s $client_interface | grep 'inet ' | awk '{print $2}' | awk -F "/" '{print $1}')
+    client_address=$(ip a s $client_interface | grep 'inet ' | awk '{print $2}' | awk -F "/" '{print $1}' | head -n 1)
 fi
 
 if [ -z "${listen_ip}" ] ; then
@@ -46,14 +46,15 @@ if [ -z "${listen_ip}" ] ; then
     listen_ip=0.0.0.0
 fi
 
+touch /tmp/pod-shared/nova-console.conf
 if [ "${console_kind}" == "novnc" ] ; then
-cat <<EOF>/tmp/pod-shared/nova-vnc.ini
+  cat > /tmp/pod-shared/nova-console.conf <<EOF
 [vnc]
 vncserver_proxyclient_address = $client_address
 vncserver_listen = $listen_ip
 EOF
 elif [ "${console_kind}" == "spice" ] ; then
-cat <<EOF>/tmp/pod-shared/nova-spice.ini
+  cat > /tmp/pod-shared/nova-console.conf <<EOF
 [spice]
 server_proxyclient_address = $client_address
 server_listen = $listen_ip

@@ -63,6 +63,7 @@ images:
     neutron_server: 'docker.io/kolla/ubuntu-source-neutron-server:3.0.3'
     nova_api: 'docker.io/kolla/ubuntu-source-nova-api:3.0.3'
     nova_cell_setup: 'docker.io/kolla/ubuntu-source-nova-api:3.0.3'
+    nova_cell_setup_init: 'docker.io/kolla/ubuntu-source-nova-api:3.0.3'
     nova_compute: 'docker.io/kolla/ubuntu-source-nova-compute:3.0.3'
     nova_compute_ironic: 'docker.io/kolla/ubuntu-source-nova-compute-ironic:3.0.3'
     nova_compute_ssh: 'docker.io/kolla/ubuntu-source-nova-ssh:3.0.3'
@@ -81,9 +82,13 @@ images:
     senlin_api: 'docker.io/kolla/ubuntu-source-senlin-api:3.0.3'
     senlin_db_sync: 'docker.io/kolla/ubuntu-source-senlin-api:3.0.3'
     senlin_engine: 'docker.io/kolla/ubuntu-source-senlin-engine:3.0.3'
+    senlin_engine_cleaner: 'docker.io/kolla/ubuntu-source-senlin-engine:3.0.3'
+    tempest: 'docker.io/kolla/ubuntu-source-tempest:3.0.3'
     test: 'docker.io/kolla/ubuntu-source-rally:4.0.0'
 pod:
   user:
+    keystone:
+      uid: 1000
     barbican:
       uid: 1000
     cinder:
