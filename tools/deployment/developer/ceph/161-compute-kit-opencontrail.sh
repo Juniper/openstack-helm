@@ -57,6 +57,7 @@ fi
 helm upgrade --install neutron ./neutron \
     --namespace=openstack \
     --values=./tools/overrides/backends/opencontrail/neutron.yaml \
+    --set conf.openstack_version=$OPENSTACK_VERSION \
     ${OSH_EXTRA_HELM_ARGS} \
     ${OSH_EXTRA_HELM_ARGS_NEUTRON}
 

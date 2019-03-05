@@ -62,6 +62,9 @@ spec:
           imagePullPolicy: {{ .Values.images.pull_policy }}
           securityContext:
             runAsUser: {{ .Values.pod.user.neutron.uid }}
+          env:
+            - name: OPENSTACK_VERSION
+              value: "{{ .Values.conf.openstack_version }}"
           volumeMounts:
             - name: neutron-plugin-shared
               mountPath: /opt/plugin
