@@ -26,4 +26,14 @@ sudo apt-get install --no-install-recommends -y \
         curl \
         uuid-runtime \
         linux-headers-$(uname -r) \
-        ipcalc
+        ipcalc \
+        ntp ntpdate
+
+sudo systemctl stop ntp
+sudo bash -c "printf 'server anyntp.juniper.net iburst\nserver 10.84.5.101 iburst\nserver 172.21.200.60 iburst' >> /etc/ntp.conf"
+sudo ntpdate anyntp.juniper.net || /bin/true
+sudo ntpdate 10.84.5.101 || /bin/true
+sudo ntpdate 172.21.200.60 || /bin/true
+sudo systemctl start ntp
+sleep 10
+sudo ntpq -p
