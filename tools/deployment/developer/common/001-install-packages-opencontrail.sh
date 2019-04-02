@@ -26,4 +26,11 @@ sudo apt-get install --no-install-recommends -y \
         curl \
         uuid-runtime \
         linux-headers-$(uname -r) \
-        ipcalc
+        ipcalc \
+        ntp ntpdate
+
+sudo systemctl stop ntp
+sudo bash -c "printf 'tinker panic 0\ndisable monitor\nrestrict default kod nomodify notrap nopeer noquery\nrestrict -6 default kod nomodify notrap nopeer noquery\nrestrict 127.0.0.1\nrestrict -6 ::1\nserver 192.168.1.1 iburst\ndriftfile /var/lib/ntp/drift\n' >> /etc/ntp.conf"
+sudo ntpdate 192.168.1.1
+sudo systemctl start ntp
+sudo ntpq -p
