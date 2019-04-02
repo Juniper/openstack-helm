@@ -26,4 +26,8 @@ sudo apt-get install --no-install-recommends -y \
         curl \
         uuid-runtime \
         linux-headers-$(uname -r) \
-        ipcalc
+        ipcalc \
+        ntp ntpdate
+sudo bash -c "echo 'server 192.168.1.1 >> /etc/ntp.conf'"
+sleep 10
+sudo ntpq -p
