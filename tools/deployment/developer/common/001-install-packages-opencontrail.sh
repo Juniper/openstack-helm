@@ -26,4 +26,5 @@ sudo apt-get install --no-install-recommends -y \
         curl \
         uuid-runtime \
         linux-headers-$(uname -r) \
-        ipcalc
+        ipcalc \
+        ntp ntpdate
