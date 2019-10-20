@@ -21,7 +21,7 @@ os_distr=$(awk -F= '/^NAME/{print $2}' /etc/os-release | tr "[:upper:]" "[:lower
 if [[ $os_distr = *"centos"* ]];then
   sudo -H yum remove -y python-yaml
 elif [[ $os_distr = *"ubuntu"* ]];then
-  sudo -H apt-get --purge remove python-yaml -y
+  sudo -H apt-get --purge remove python-yaml python3-yaml -y
 fi
 
 sudo -H -E pip install python-openstackclient python-heatclient
